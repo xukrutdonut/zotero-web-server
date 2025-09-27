@@ -1,0 +1,54 @@
+version: '3.8'
+
+services:
+  zotero-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: neuropedialab/zotero-web-server:latest
+    container_name: zotero-web-server
+    restart: unless-stopped
+    
+    ports:
+      - "8080:8080"
+    
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+      - BIBLIOTECA_DIR=/app/data/biblioteca
+      - ZOTERO_DB=/app/data/zotero.sqlite
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-zotero-$(openssl rand -hex 8)}
+    
+    volumes:
+      # Montar biblioteca de documentos (solo lectura)
+      - ${HOST_BIBLIOTECA_DIR:-./data/biblioteca}:/app/data/biblioteca:ro
+      # Montar base de datos Zotero (solo lectura) 
+      - ${HOST_ZOTERO_DB:-./data/zotero.sqlite}:/app/data/zotero.sqlite:ro
+      # Montar directorio de índice (lectura/escritura)
+      - ${HOST_DATA_DIR:-./data}:/app/data
+      # Logs
+      - ./logs:/app/logs
+    
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.zotero.rule=Host(`biblioteca.neuropedialab.com`)"
+      - "traefik.http.routers.zotero.tls.certresolver=letsencrypt"
+      - "traefik.http.services.zotero.loadbalancer.server.port=8080"
+    
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    
+    networks:
+      - zotero-net
+
+networks:
+  zotero-net:
+    driver: bridge
+
+volumes:
+  zotero-data:
+    driver: local
