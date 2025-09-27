@@ -330,8 +330,12 @@ app.get('/biblioteca/*', async (req, res) => {
         
         // Para archivos grandes (50-200MB), añadir headers de streaming y advertencia
         const isLargeFile = stats.size > 50 * 1024 * 1024;
-        if (isLargeFile && !req.query.download && !req.query.force) {
-            console.log(`⚠️ Archivo grande, ofreciendo opciones: ${path.basename(fullPath)}`);
+        
+        // Solo mostrar opciones si se accede a la API directamente (no desde el navegador)
+        const isAPIRequest = req.headers.accept && req.headers.accept.includes('application/json');
+        
+        if (isLargeFile && !req.query.download && !req.query.force && isAPIRequest) {
+            console.log(`⚠️ Archivo grande, ofreciendo opciones via API: ${path.basename(fullPath)}`);
             return res.json({ 
                 message: 'Archivo grande detectado',
                 size: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
@@ -341,6 +345,12 @@ app.get('/biblioteca/*', async (req, res) => {
                 },
                 warning: 'La visualización en línea puede ser lenta para archivos grandes'
             });
+        }
+        
+        // Para archivos muy grandes (>100MB) sin force, redirigir a descarga automáticamente
+        if (stats.size > 100 * 1024 * 1024 && !req.query.force && !req.query.download) {
+            console.log(`🔄 Archivo muy grande, redirigiendo a descarga: ${path.basename(fullPath)}`);
+            return res.redirect(301, `/biblioteca/${relativePath}?download=1`);
         }
         
         // Configurar headers
