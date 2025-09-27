@@ -30,7 +30,7 @@ Un servidor web profesional para acceder, buscar y gestionar tu biblioteca de do
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/tu-usuario/zotero-web-server.git
+git clone https://github.com/TU-USUARIO/zotero-web-server.git
 cd zotero-web-server
 
 # Configurar variables de entorno
@@ -48,7 +48,7 @@ docker-compose logs -f zotero-server
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/tu-usuario/zotero-web-server.git
+git clone https://github.com/TU-USUARIO/zotero-web-server.git
 cd zotero-web-server
 
 # Instalar dependencias
