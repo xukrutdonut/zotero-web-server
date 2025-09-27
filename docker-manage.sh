@@ -1,144 +1,267 @@
 #!/bin/bash
 
-# Script para gestión Docker del servidor Zotero
+# 🐳 Script de gestión Docker para Servidor Zotero Web
+# NeuropediaLab - 2025
 
-set -e
+# Colores para output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
 
+# Variables
 CONTAINER_NAME="zotero-web-server"
-IMAGE_NAME="zotero-server"
+IMAGE_NAME="neuropedialab/zotero-web-server:latest"
+COMPOSE_FILE="docker-compose.yml"
 
-echo "🐳 Gestor Docker del Servidor Zotero"
-echo "===================================="
+# Funciones
+show_header() {
+    echo -e "${BLUE}"
+    echo "┌─────────────────────────────────────────────┐"
+    echo "│  🐳 Gestor Docker - Servidor Zotero Web    │"
+    echo "│              NeuropediaLab 2025             │"
+    echo "└─────────────────────────────────────────────┘"
+    echo -e "${NC}"
+}
 
-# Función para construir la imagen
+show_help() {
+    echo -e "${YELLOW}📋 Comandos disponibles:${NC}"
+    echo "  build    - 🏗️  Construir imagen Docker"
+    echo "  start    - 🚀 Iniciar servidor en Docker"
+    echo "  stop     - 🛑 Parar servidor Docker"
+    echo "  restart  - 🔄 Reiniciar servidor Docker"
+    echo "  logs     - 📋 Ver logs del contenedor"
+    echo "  shell    - 💻 Acceder al shell del contenedor"
+    echo "  status   - 📊 Ver estado del contenedor"
+    echo "  clean    - 🧹 Limpiar contenedores e imágenes"
+    echo "  update   - 🔄 Actualizar y reconstruir"
+    echo "  backup   - 💾 Hacer backup de datos"
+    echo "  help     - ❓ Mostrar esta ayuda"
+}
+
+check_docker() {
+    if ! command -v docker &> /dev/null; then
+        echo -e "${RED}❌ Error: Docker no está instalado${NC}"
+        exit 1
+    fi
+    
+    if ! docker info &> /dev/null; then
+        echo -e "${RED}❌ Error: Docker no está ejecutándose${NC}"
+        echo -e "${YELLOW}💡 Ejecuta: sudo systemctl start docker${NC}"
+        exit 1
+    fi
+}
+
 build_image() {
-    echo "🔨 Construyendo imagen Docker..."
-    docker build -t $IMAGE_NAME .
-    echo "✅ Imagen construida: $IMAGE_NAME"
-}
-
-# Función para iniciar con docker-compose
-start_compose() {
-    echo "🚀 Iniciando con Docker Compose..."
-    docker-compose up -d
-    echo "✅ Contenedor iniciado"
-    show_status
-}
-
-# Función para iniciar contenedor simple
-start_container() {
-    echo "🚀 Iniciando contenedor..."
+    echo -e "${BLUE}🏗️ Construyendo imagen Docker...${NC}"
     
-    # Detener contenedor si existe
-    docker stop $CONTAINER_NAME 2>/dev/null || true
-    docker rm $CONTAINER_NAME 2>/dev/null || true
+    # Verificar que tenemos los archivos necesarios
+    if [ ! -f "Dockerfile" ] || [ ! -f "$COMPOSE_FILE" ]; then
+        echo -e "${RED}❌ Error: Faltan archivos Docker necesarios${NC}"
+        exit 1
+    fi
     
-    # Iniciar nuevo contenedor
-    docker run -d \
-        --name $CONTAINER_NAME \
-        --restart unless-stopped \
-        -p 8080:8080 \
-        -v "/home/arkantu/Zotero:/app/zotero:ro" \
-        -v "/home/arkantu/Documentos/Zotero Biblioteca:/app/biblioteca:ro" \
-        -v "zotero_logs:/app/logs" \
-        -v "zotero_data:/app/data" \
-        -e NODE_ENV=production \
-        -e ZOTERO_API_KEY=zotero-docker-secret-2024 \
-        $IMAGE_NAME
+    docker compose build --no-cache
     
-    echo "✅ Contenedor iniciado: $CONTAINER_NAME"
-    show_status
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Imagen construida exitosamente${NC}"
+    else
+        echo -e "${RED}❌ Error construyendo la imagen${NC}"
+        exit 1
+    fi
 }
 
-# Función para detener contenedor
-stop_container() {
-    echo "⏹️ Deteniendo contenedor..."
-    docker-compose down 2>/dev/null || docker stop $CONTAINER_NAME
-    echo "✅ Contenedor detenido"
+start_server() {
+    echo -e "${BLUE}🚀 Iniciando Servidor Zotero Web en Docker...${NC}"
+    
+    # Verificar que la imagen existe
+    if ! docker image inspect $IMAGE_NAME &> /dev/null; then
+        echo -e "${YELLOW}⚠️ Imagen no encontrada, construyendo...${NC}"
+        build_image
+    fi
+    
+    # Crear directorios de logs si no existen
+    mkdir -p logs
+    
+    docker compose up -d
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Servidor iniciado exitosamente${NC}"
+        echo -e "${CYAN}🌐 URL: http://localhost:8080${NC}"
+        echo -e "${PURPLE}📋 Ver logs: ./docker-manage.sh logs${NC}"
+        echo -e "${PURPLE}📊 Estado: ./docker-manage.sh status${NC}"
+    else
+        echo -e "${RED}❌ Error iniciando el servidor${NC}"
+        exit 1
+    fi
 }
 
-# Función para mostrar logs
+stop_server() {
+    echo -e "${YELLOW}🛑 Parando Servidor Zotero Web...${NC}"
+    
+    docker compose down
+    
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}✅ Servidor parado exitosamente${NC}"
+    else
+        echo -e "${RED}❌ Error parando el servidor${NC}"
+        exit 1
+    fi
+}
+
+restart_server() {
+    echo -e "${BLUE}🔄 Reiniciando Servidor Zotero Web...${NC}"
+    stop_server
+    sleep 2
+    start_server
+}
+
 show_logs() {
-    echo "📝 Logs del contenedor:"
-    docker-compose logs -f zotero-server 2>/dev/null || docker logs -f $CONTAINER_NAME
+    echo -e "${BLUE}📋 Mostrando logs del contenedor...${NC}"
+    echo -e "${YELLOW}💡 Presiona Ctrl+C para salir${NC}"
+    
+    docker compose logs -f
 }
 
-# Función para mostrar estado
+enter_shell() {
+    echo -e "${BLUE}💻 Accediendo al shell del contenedor...${NC}"
+    
+    if ! docker compose ps | grep -q "$CONTAINER_NAME.*Up"; then
+        echo -e "${RED}❌ Error: El contenedor no está ejecutándose${NC}"
+        echo -e "${YELLOW}💡 Ejecuta: ./docker-manage.sh start${NC}"
+        exit 1
+    fi
+    
+    docker compose exec zotero-server /bin/bash
+}
+
 show_status() {
-    echo ""
-    echo "📊 Estado del contenedor:"
-    docker ps | grep zotero || echo "❌ Contenedor no está corriendo"
-    echo ""
-    echo "🌐 URLs de acceso:"
-    echo "  Local: http://localhost:8080"
-    echo "  Público: https://zotero.neuropedialab.org"
-    echo ""
-    echo "🔐 API para ChatGPT:"
-    echo "  URL: http://localhost:8080/api/hidden/bibliography"
-    echo "  API Key: zotero-docker-secret-2024"
+    echo -e "${BLUE}📊 Estado del Servidor Zotero Web:${NC}\n"
+    
+    # Estado del contenedor
+    if docker compose ps | grep -q "$CONTAINER_NAME.*Up"; then
+        echo -e "${GREEN}✅ Contenedor: EJECUTÁNDOSE${NC}"
+        
+        # Obtener IP del contenedor
+        CONTAINER_IP=$(docker inspect -f '{{range.NetworkSettings.Networks}}{{.IPAddress}}{{end}}' $CONTAINER_NAME 2>/dev/null)
+        echo -e "${CYAN}🔗 IP Contenedor: $CONTAINER_IP${NC}"
+        
+        # Test de conectividad
+        if curl -s http://localhost:8080/api/stats > /dev/null; then
+            echo -e "${GREEN}🌐 Servidor Web: FUNCIONANDO${NC}"
+            
+            # Obtener estadísticas
+            STATS=$(curl -s http://localhost:8080/api/stats)
+            if [ $? -eq 0 ] && [ "$STATS" != "" ]; then
+                echo -e "${PURPLE}📊 Estadísticas: $(echo $STATS | jq -r '.totalPDFs // "N/A"') PDFs encontrados${NC}" 2>/dev/null || echo -e "${PURPLE}📊 API respondiendo correctamente${NC}"
+            fi
+        else
+            echo -e "${RED}❌ Servidor Web: NO RESPONDE${NC}"
+        fi
+        
+    else
+        echo -e "${RED}❌ Contenedor: PARADO${NC}"
+    fi
+    
+    # Uso de recursos
+    echo -e "\n${BLUE}📈 Recursos:${NC}"
+    docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}" $CONTAINER_NAME 2>/dev/null || echo -e "${YELLOW}⚠️ Contenedor no está ejecutándose${NC}"
 }
 
-# Función para entrar al contenedor
-shell_access() {
-    echo "🔧 Accediendo al shell del contenedor..."
-    docker exec -it $CONTAINER_NAME /bin/bash
+clean_docker() {
+    echo -e "${YELLOW}🧹 Limpiando contenedores e imágenes Docker...${NC}"
+    echo -e "${RED}⚠️ Esto eliminará el contenedor y la imagen local${NC}"
+    
+    read -p "¿Continuar? (y/N): " -n 1 -r
+    echo
+    
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        docker compose down --rmi all --volumes --remove-orphans
+        docker system prune -f
+        echo -e "${GREEN}✅ Limpieza completada${NC}"
+    else
+        echo -e "${YELLOW}❌ Limpieza cancelada${NC}"
+    fi
 }
 
-# Función para limpiar recursos Docker
-cleanup() {
-    echo "🧹 Limpiando recursos Docker..."
-    docker-compose down -v 2>/dev/null || true
-    docker stop $CONTAINER_NAME 2>/dev/null || true
-    docker rm $CONTAINER_NAME 2>/dev/null || true
-    docker image prune -f
-    echo "✅ Limpieza completada"
+update_server() {
+    echo -e "${BLUE}🔄 Actualizando Servidor Zotero Web...${NC}"
+    
+    stop_server
+    build_image
+    start_server
+    
+    echo -e "${GREEN}✅ Servidor actualizado exitosamente${NC}"
 }
 
-# Menú principal
-case "${1:-menu}" in
-    "build")
-        build_image
-        ;;
-    "start")
-        build_image
-        start_compose
-        ;;
-    "start-simple")
-        build_image
-        start_container
-        ;;
-    "stop")
-        stop_container
-        ;;
-    "restart")
-        stop_container
-        sleep 2
-        start_compose
-        ;;
-    "logs")
-        show_logs
-        ;;
-    "status")
-        show_status
-        ;;
-    "shell")
-        shell_access
-        ;;
-    "cleanup")
-        cleanup
-        ;;
-    "menu"|*)
-        echo ""
-        echo "Selecciona una opción:"
-        echo "  ./docker-manage.sh build        - Construir imagen Docker"
-        echo "  ./docker-manage.sh start        - Iniciar con docker-compose"
-        echo "  ./docker-manage.sh start-simple - Iniciar contenedor simple"
-        echo "  ./docker-manage.sh stop         - Detener contenedor"
-        echo "  ./docker-manage.sh restart      - Reiniciar contenedor"
-        echo "  ./docker-manage.sh logs         - Ver logs"
-        echo "  ./docker-manage.sh status       - Ver estado"
-        echo "  ./docker-manage.sh shell        - Acceder al shell"
-        echo "  ./docker-manage.sh cleanup      - Limpiar recursos"
-        echo ""
-        ;;
-esac
+backup_data() {
+    echo -e "${BLUE}💾 Creando backup de datos...${NC}"
+    
+    BACKUP_DIR="backups/$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$BACKUP_DIR"
+    
+    # Backup de logs
+    if [ -d "logs" ]; then
+        cp -r logs "$BACKUP_DIR/"
+        echo -e "${GREEN}✅ Logs respaldados${NC}"
+    fi
+    
+    # Backup de configuración
+    cp docker-compose.yml Dockerfile .env 2>/dev/null "$BACKUP_DIR/" || true
+    
+    # Backup del volumen Docker (datos persistentes)
+    if docker volume inspect zotero-web-server_zotero-data &>/dev/null; then
+        docker run --rm -v zotero-web-server_zotero-data:/source -v "$(pwd)/$BACKUP_DIR":/backup alpine tar czf /backup/zotero-data.tar.gz -C /source .
+        echo -e "${GREEN}✅ Datos del volumen respaldados${NC}"
+    fi
+    
+    echo -e "${GREEN}📁 Backup creado en: $BACKUP_DIR${NC}"
+}
+
+# Script principal
+main() {
+    show_header
+    check_docker
+    
+    case "${1:-help}" in
+        "build")
+            build_image
+            ;;
+        "start")
+            start_server
+            ;;
+        "stop")
+            stop_server
+            ;;
+        "restart")
+            restart_server
+            ;;
+        "logs")
+            show_logs
+            ;;
+        "shell")
+            enter_shell
+            ;;
+        "status")
+            show_status
+            ;;
+        "clean")
+            clean_docker
+            ;;
+        "update")
+            update_server
+            ;;
+        "backup")
+            backup_data
+            ;;
+        "help"|*)
+            show_help
+            ;;
+    esac
+}
+
+# Ejecutar función principal
+main "$@"

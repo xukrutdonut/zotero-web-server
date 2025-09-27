@@ -17,38 +17,51 @@ services:
       - PORT=8080
       - BIBLIOTECA_DIR=/app/data/biblioteca
       - ZOTERO_DB=/app/data/zotero.sqlite
-      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-zotero-$(openssl rand -hex 8)}
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-zotero-neuropedialab-docker-2024}
     
     volumes:
-      # Montar biblioteca de documentos (solo lectura)
-      - ${HOST_BIBLIOTECA_DIR:-./data/biblioteca}:/app/data/biblioteca:ro
-      # Montar base de datos Zotero (solo lectura) 
-      - ${HOST_ZOTERO_DB:-./data/zotero.sqlite}:/app/data/zotero.sqlite:ro
-      # Montar directorio de índice (lectura/escritura)
-      - ${HOST_DATA_DIR:-./data}:/app/data
-      # Logs
-      - ./logs:/app/logs
+      # Montar biblioteca de documentos desde el host
+      - "${HOST_BIBLIOTECA_DIR:-/home/arkantu/Documentos/Zotero Biblioteca}:/app/data/biblioteca:ro"
+      # Montar base de datos Zotero desde el host
+      - "${HOST_ZOTERO_DB:-/home/arkantu/Zotero/zotero.sqlite}:/app/data/zotero.sqlite:ro"
+      # Directorio de datos persistentes (índices, logs)
+      - "zotero-data:/app/data"
+      # Logs del contenedor
+      - "./logs:/app/logs"
     
     labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.zotero.rule=Host(`biblioteca.neuropedialab.com`)"
-      - "traefik.http.routers.zotero.tls.certresolver=letsencrypt"
-      - "traefik.http.services.zotero.loadbalancer.server.port=8080"
+      - "com.neuropedialab.service=zotero-web-server"
+      - "com.neuropedialab.version=2.0"
+      - "com.neuropedialab.description=Servidor web para biblioteca Zotero"
     
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/stats"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 60s
     
     networks:
       - zotero-net
+    
+    # Limitar recursos del contenedor
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
 
 networks:
   zotero-net:
     driver: bridge
+    labels:
+      - "com.neuropedialab.network=zotero-web-server"
 
 volumes:
   zotero-data:
     driver: local
+    labels:
+      - "com.neuropedialab.volume=zotero-data"

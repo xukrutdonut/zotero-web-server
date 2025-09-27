@@ -6,13 +6,14 @@ LABEL maintainer="NeuropediaLab"
 LABEL description="Servidor web para acceso y búsqueda en biblioteca Zotero con indexación de texto completo"
 LABEL version="2.0"
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema para PDF processing
 RUN apk add --no-cache \
     poppler-utils \
     tesseract-ocr \
     tesseract-ocr-data-spa \
     tesseract-ocr-data-eng \
     curl \
+    bash \
     && rm -rf /var/cache/apk/*
 
 # Crear usuario no-root
@@ -31,8 +32,9 @@ RUN npm ci --only=production && npm cache clean --force
 # Copiar código fuente
 COPY . .
 
-# Crear directorios necesarios
-RUN mkdir -p logs web data && \
+# Crear directorios necesarios y establecer permisos
+RUN mkdir -p logs web data data/biblioteca data/storage && \
+    chmod +x *.sh 2>/dev/null || true && \
     chown -R zotero:nodejs /app
 
 # Cambiar al usuario no-root
@@ -48,8 +50,8 @@ ENV BIBLIOTECA_DIR=/app/data/biblioteca
 ENV ZOTERO_DB=/app/data/zotero.sqlite
 
 # Comando de health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/api/stats || exit 1
 
-# Comando de inicio
-CMD ["node", "final-clean-server.js"]
+# Usar el servidor sin watchers para evitar problemas de límites en contenedores
+CMD ["node", "enhanced-server-no-watchers.js"]
