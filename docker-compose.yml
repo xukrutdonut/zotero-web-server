@@ -24,8 +24,8 @@ services:
       - "${HOST_BIBLIOTECA_DIR:-/home/arkantu/Documentos/Zotero Biblioteca}:/app/data/biblioteca:ro"
       # Montar base de datos Zotero desde el host
       - "${HOST_ZOTERO_DB:-/home/arkantu/Zotero/zotero.sqlite}:/app/data/zotero.sqlite:ro"
-      # Directorio de datos persistentes (índices, logs)
-      - "zotero-data:/app/data"
+      # Directorio de datos persistentes (índices, cache) - evitamos conflicto con biblioteca y db
+      - "zotero-data:/app/data/cache"
       # Logs del contenedor
       - "./logs:/app/logs"
     

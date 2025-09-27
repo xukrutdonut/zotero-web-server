@@ -1,103 +1,83 @@
 #!/bin/bash
 
-echo "🚀 Iniciando servidor Zotero SIMPLE (FUNCIONANDO)..."
-
-# Detener procesos existentes
-pkill -f "node.*server.js" 2>/dev/null || true
-pkill -f "node.*hybrid" 2>/dev/null || true
-pkill -f "npx serve" 2>/dev/null || true
-
-# Crear directorio de logs
-mkdir -p ~/zotero-web-server/logs
-
-# Iniciar la API en puerto 3000
-echo "📡 Iniciando API de Zotero en puerto 3000..."
-cd ~/zotero-web-server/api
-ZOTERO_DATA_DIR="/home/arkantu/Zotero" ZOTERO_LIBRARY_DIR="/home/arkantu/Documentos/Zotero Biblioteca" nohup node server.js > ../logs/api.log 2>&1 &
-API_PID=$!
-echo $API_PID > ../api.pid
-
-sleep 3
-
-# Verificar API
-if curl -s http://localhost:3000/health > /dev/null; then
-    echo "✅ API funcionando en puerto 3000"
-else
-    echo "❌ Error con API"
-    exit 1
-fi
-
-# Verificar permisos y crear enlaces simbólicos en web/
-echo "🔧 Configurando acceso a archivos..."
-cd ~/zotero-web-server/web
-rm -rf storage library 2>/dev/null || true
-
-# Crear enlaces simbólicos para acceso directo
-ln -sf ~/Zotero/storage ./storage
-ln -sf "/home/arkantu/Documentos/Zotero Biblioteca" ./library
-
-chmod -R 755 ~/Zotero/storage/ 2>/dev/null || true
-chmod -R 755 "/home/arkantu/Documentos/Zotero Biblioteca/" 2>/dev/null || true
-
-# Iniciar servidor web simple con serve
-echo "🌐 Iniciando servidor web con acceso a archivos..."
-cd ~/zotero-web-server/web
-nohup npx serve . -l 8080 --cors > ../logs/web-simple.log 2>&1 &
-WEB_PID=$!
-echo $WEB_PID > ../web-simple.pid
-
-sleep 3
-
-# Verificar servidor web
-if curl -s http://localhost:8080 > /dev/null; then
-    echo "✅ Servidor web funcionando en puerto 8080"
-else
-    echo "❌ Error con servidor web"
-    exit 1
-fi
-
-# Probar acceso a archivos
-echo "🧪 Probando acceso a archivos..."
-if curl -s -I http://localhost:8080/storage/55LW44KC/ | grep -q "200 OK\|301\|302"; then
-    echo "   ✅ Acceso a storage funcionando"
-else
-    echo "   ⚠️  Storage: verificar permisos"
-fi
-
-if curl -s -I http://localhost:8080/biblioteca/ | grep -q "200 OK\|301\|302"; then
-    echo "   ✅ Acceso a biblioteca funcionando"
-else
-    echo "   ⚠️  Biblioteca: verificar permisos"
-fi
-
-IP=$(hostname -I | awk '{print $1}')
-ITEMS=$(curl -s http://localhost:3000/library | jq length 2>/dev/null || echo "?")
-
-echo ""
-echo "🎉 ¡Servidor Zotero SIMPLE iniciado correctamente!"
+echo "🐳 Iniciando Servidor Zotero Web (Docker puro)"
 echo "=============================================="
+
+# Verificar que Docker esté instalado
+if ! command -v docker &> /dev/null; then
+    echo "❌ Docker no está instalado. Por favor, instala Docker primero."
+    exit 1
+fi
+
+# Verificar configuración
+source .env 2>/dev/null || {
+    echo "⚠️  Archivo .env no encontrado. Usando configuración por defecto."
+    export HOST_BIBLIOTECA_DIR="/home/arkantu/Documentos/Zotero Biblioteca"
+    export HOST_ZOTERO_DB="/home/arkantu/Zotero/zotero.sqlite"
+    export ZOTERO_API_KEY="zotero-neuropedialab-docker-2024"
+}
+
+if [ ! -d "$HOST_BIBLIOTECA_DIR" ]; then
+    echo "⚠️  Directorio de biblioteca no encontrado: $HOST_BIBLIOTECA_DIR"
+fi
+
+if [ ! -f "$HOST_ZOTERO_DB" ]; then
+    echo "⚠️  Base de datos Zotero no encontrada: $HOST_ZOTERO_DB"
+fi
+
+# Crear directorios necesarios
+mkdir -p logs
+
 echo ""
-echo "📍 Acceso directo:"
-echo "   - Local: http://localhost:8080"
-echo "   - Red local: http://$IP:8080"
+echo "📋 Configuración:"
+echo "   Biblioteca: $HOST_BIBLIOTECA_DIR"
+echo "   Base de datos: $HOST_ZOTERO_DB"
+echo "   Puerto: 8080"
 echo ""
-echo "🌐 Para tu Nginx Proxy Manager:"
-echo "   Domain: zotero.neuropedialab.org"
-echo "   Forward to: http://$IP:8080"
-echo "   ✅ Acceso completo a PDFs via enlaces simbólicos"
-echo ""
-echo "📊 Estado:"
-echo "   - API: ✅ Puerto 3000"
-echo "   - Web: ✅ Puerto 8080 (serve + symlinks)" 
-echo "   - Elementos en biblioteca: $ITEMS"
-echo ""
-echo "🔍 Rutas de archivos (FUNCIONALES):"
-echo "   - Storage: http://localhost:8080/storage/[ID]/archivo.pdf"
-echo "   - Biblioteca: http://localhost:8080/library/archivo.pdf"
-echo ""
-echo "📊 Monitoreo:"
-echo "   - API: tail -f ~/zotero-web-server/logs/api.log"
-echo "   - Web: tail -f ~/zotero-web-server/logs/web-simple.log"
-echo ""
-echo "🛑 Para detener: ./stop-simple.sh"
-echo ""
+
+# Construir imagen Docker
+echo "🔨 Construyendo imagen Docker..."
+docker build -t neuropedialab/zotero-web-server:latest .
+
+# Detener contenedor existente si existe
+echo "🛑 Deteniendo contenedor previo (si existe)..."
+docker stop zotero-web-server 2>/dev/null || true
+docker rm zotero-web-server 2>/dev/null || true
+
+# Crear red Docker
+docker network create zotero-net 2>/dev/null || true
+
+# Ejecutar contenedor
+echo "🚀 Iniciando servidor..."
+docker run -d \
+    --name zotero-web-server \
+    --network zotero-net \
+    -p 8080:8080 \
+    -e NODE_ENV=production \
+    -e PORT=8080 \
+    -e BIBLIOTECA_DIR=/app/data/biblioteca \
+    -e ZOTERO_DB=/app/data/zotero.sqlite \
+    -e ZOTERO_API_KEY="$ZOTERO_API_KEY" \
+    -v "$HOST_BIBLIOTECA_DIR:/app/data/biblioteca:ro" \
+    -v "$HOST_ZOTERO_DB:/app/data/zotero.sqlite:ro" \
+    -v "$(pwd)/logs:/app/logs" \
+    --restart unless-stopped \
+    --memory=2g \
+    --cpus=1.0 \
+    neuropedialab/zotero-web-server:latest
+
+if [ $? -eq 0 ]; then
+    echo ""
+    echo "✅ Servidor iniciado exitosamente!"
+    echo "🌐 Accede en: http://localhost:8080"
+    echo ""
+    echo "📝 Comandos útiles:"
+    echo "   Ver logs:     docker logs -f zotero-web-server"
+    echo "   Detener:      docker stop zotero-web-server"
+    echo "   Reiniciar:    docker restart zotero-web-server"
+    echo "   Estado:       docker ps"
+    echo "   Eliminar:     docker rm -f zotero-web-server"
+else
+    echo "❌ Error al iniciar el servidor"
+    exit 1
+fi

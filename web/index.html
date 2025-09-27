@@ -587,22 +587,41 @@
         // Cargar estructura de carpetas con reintentos
         async function loadFolderTree() {
             try {
+                console.log('🔍 Iniciando carga de estructura...');
+                
+                // Verificar que el elemento DOM existe
+                if (!elements.folderTree) {
+                    console.error('❌ Elemento folderTree no encontrado en DOM');
+                    return;
+                }
+                
                 elements.folderTree.innerHTML = '<div class="loading">Cargando estructura de carpetas...</div>';
+                console.log('📝 Estado inicial establecido');
                 
                 const response = await fetch(`${API_BASE}/api/folder-tree`);
+                console.log(`📡 Respuesta recibida: ${response.status} ${response.ok ? 'OK' : 'ERROR'}`);
                 
                 if (!response.ok) {
                     throw new Error(`Error HTTP: ${response.status}`);
                 }
                 
                 const data = await response.json();
+                console.log('📊 Datos procesados:', {
+                    hasError: !!data.error,
+                    hasTree: !!data.tree,
+                    treeLength: data.tree ? data.tree.length : 'N/A'
+                });
                 
-                if (!data.success) {
-                    throw new Error(data.error || 'Error desconocido');
+                if (data.error) {
+                    throw new Error(data.error);
                 }
                 
                 folderTree = data.tree || [];
+                console.log(`✅ Estructura cargada: ${folderTree.length} elementos`);
+                
                 renderFolderTree(folderTree);
+                console.log('🎨 Renderizado completado');
+                
                 retryCount = 0;
                 
             } catch (error) {
@@ -610,6 +629,7 @@
                 
                 retryCount++;
                 if (retryCount < MAX_RETRIES) {
+                    console.log(`🔄 Reintentando... (${retryCount}/${MAX_RETRIES})`);
                     elements.folderTree.innerHTML = `
                         <div class="error-message">
                             Error cargando estructura (intento ${retryCount}/${MAX_RETRIES})
@@ -618,6 +638,7 @@
                     `;
                     setTimeout(loadFolderTree, RETRY_DELAY);
                 } else {
+                    console.error('💀 Máximo de reintentos alcanzado');
                     elements.folderTree.innerHTML = `
                         <div class="error-message">
                             Error cargando estructura de carpetas
@@ -630,15 +651,21 @@
 
         // Renderizar árbol de carpetas
         function renderFolderTree(tree, container = elements.folderTree, level = 0) {
+            console.log(`🎨 Renderizando árbol - Nivel: ${level}, Elementos: ${tree ? tree.length : 'N/A'}`);
+            
             if (level === 0) {
                 if (!tree || tree.length === 0) {
+                    console.log('📝 No hay elementos - mostrando mensaje vacío');
                     container.innerHTML = '<div class="no-results">No hay documentos en la biblioteca</div>';
                     return;
                 }
+                console.log('🧹 Limpiando contenedor principal');
                 container.innerHTML = '';
             }
 
-            tree.forEach(item => {
+            tree.forEach((item, index) => {
+                console.log(`📁 Procesando item ${index + 1}/${tree.length}: ${item.name} (${item.type})`);
+                
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'tree-item';
                 
@@ -676,6 +703,10 @@
                 
                 container.appendChild(itemDiv);
             });
+            
+            if (level === 0) {
+                console.log(`✅ Renderizado completo - ${tree.length} elementos en DOM`);
+            }
         }
 
         // Toggle carpeta
@@ -698,9 +729,115 @@
         }
 
         // Abrir archivo
-        function openFile(filePath) {
-            const url = `${API_BASE}/biblioteca/${filePath}`;
+        async function openFile(filePath) {
+            try {
+                console.log('🔍 Abriendo archivo:', filePath);
+                
+                // Primero, hacer una solicitud para verificar el tamaño
+                const checkResponse = await fetch(`${API_BASE}/biblioteca/${filePath}`);
+                
+                if (!checkResponse.ok) {
+                    throw new Error(`Error HTTP: ${checkResponse.status}`);
+                }
+                
+                const contentType = checkResponse.headers.get('content-type');
+                
+                // Si es JSON, significa que hay información sobre el archivo (probablemente grande)
+                if (contentType && contentType.includes('application/json')) {
+                    const data = await checkResponse.json();
+                    
+                    if (data.options) {
+                        // Archivo grande con opciones
+                        showLargeFileDialog(filePath, data);
+                        return;
+                    } else if (data.downloadUrl) {
+                        // Archivo muy grande, solo descarga
+                        showVeryLargeFileDialog(filePath, data);
+                        return;
+                    }
+                }
+                
+                // Archivo normal o forzado, abrir directamente
+                const url = `${API_BASE}/biblioteca/${filePath}`;
+                window.open(url, '_blank');
+                
+            } catch (error) {
+                console.error('❌ Error abriendo archivo:', error);
+                alert(`Error abriendo archivo: ${error.message}`);
+            }
+        }
+        
+        // Mostrar diálogo para archivos grandes
+        function showLargeFileDialog(filePath, data) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.7); z-index: 9999; 
+                display: flex; align-items: center; justify-content: center;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; text-align: center;">
+                    <h3>📄 Archivo Grande Detectado</h3>
+                    <p><strong>Tamaño:</strong> ${data.size}</p>
+                    <p>${data.warning || ''}</p>
+                    <div style="margin-top: 20px;">
+                        <button onclick="openFileForced('${filePath}')" style="margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            🌐 Ver en línea
+                        </button>
+                        <button onclick="downloadFile('${filePath}')" style="margin: 5px; padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            📥 Descargar
+                        </button>
+                        <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="margin: 5px; padding: 10px 15px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            ❌ Cancelar
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
+        // Mostrar diálogo para archivos muy grandes
+        function showVeryLargeFileDialog(filePath, data) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+                background: rgba(0,0,0,0.7); z-index: 9999; 
+                display: flex; align-items: center; justify-content: center;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; text-align: center;">
+                    <h3>📄 Archivo Muy Grande</h3>
+                    <p><strong>Tamaño:</strong> ${data.size}</p>
+                    <p>${data.message}</p>
+                    <p style="font-style: italic;">${data.recommendation || ''}</p>
+                    <div style="margin-top: 20px;">
+                        <button onclick="downloadFile('${filePath}')" style="margin: 5px; padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            📥 Descargar Archivo
+                        </button>
+                        <button onclick="this.closest('div[style*=\"position: fixed\"]').remove()" style="margin: 5px; padding: 10px 15px; background: #6c757d; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            ❌ Cancelar
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+        
+        // Funciones auxiliares para los modales
+        function openFileForced(filePath) {
+            const url = `${API_BASE}/biblioteca/${filePath}?force=1`;
             window.open(url, '_blank');
+            document.querySelector('div[style*="position: fixed"]').remove();
+        }
+        
+        function downloadFile(filePath) {
+            const url = `${API_BASE}/biblioteca/${filePath}?download=1`;
+            window.open(url, '_blank');
+            document.querySelector('div[style*="position: fixed"]').remove();
         }
 
         // Búsqueda en árbol

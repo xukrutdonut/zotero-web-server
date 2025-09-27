@@ -1,20 +1,11 @@
 # Dockerfile para Servidor Zotero Web - NeuropediaLab 2025
+# Versión mínima sin dependencias externas
 FROM node:18-alpine
 
 # Información del contenedor
 LABEL maintainer="NeuropediaLab"
 LABEL description="Servidor web para acceso y búsqueda en biblioteca Zotero con indexación de texto completo"
 LABEL version="2.0"
-
-# Instalar dependencias del sistema para PDF processing
-RUN apk add --no-cache \
-    poppler-utils \
-    tesseract-ocr \
-    tesseract-ocr-data-spa \
-    tesseract-ocr-data-eng \
-    curl \
-    bash \
-    && rm -rf /var/cache/apk/*
 
 # Crear usuario no-root
 RUN addgroup -g 1001 -S nodejs && \
@@ -34,7 +25,6 @@ COPY . .
 
 # Crear directorios necesarios y establecer permisos
 RUN mkdir -p logs web data data/biblioteca data/storage && \
-    chmod +x *.sh 2>/dev/null || true && \
     chown -R zotero:nodejs /app
 
 # Cambiar al usuario no-root
@@ -48,10 +38,6 @@ ENV NODE_ENV=production
 ENV PORT=8080
 ENV BIBLIOTECA_DIR=/app/data/biblioteca
 ENV ZOTERO_DB=/app/data/zotero.sqlite
-
-# Comando de health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-    CMD curl -f http://localhost:8080/api/stats || exit 1
 
 # Usar el servidor sin watchers para evitar problemas de límites en contenedores
 CMD ["node", "enhanced-server-no-watchers.js"]

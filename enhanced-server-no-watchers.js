@@ -8,16 +8,16 @@ const cors = require('cors');
 const { exec } = require('child_process');
 const EventEmitter = require('events');
 const app = express();
-const PORT = 8080;
+const PORT = process.env.PORT || 8080;
 
 // Event emitter para sincronización
 const syncEmitter = new EventEmitter();
 
-// Configuración de directorios
+// Configuración de directorios - usar variables de entorno o valores por defecto
 const WEB_DIR = path.join(__dirname, 'web');
-const STORAGE_DIR = '/home/arkantu/Zotero/storage';
-const BIBLIOTECA_DIR = '/home/arkantu/Documentos/Zotero Biblioteca';
-const ZOTERO_DB = '/home/arkantu/Zotero/zotero.sqlite';
+const STORAGE_DIR = process.env.STORAGE_DIR || '/home/arkantu/Zotero/storage';
+const BIBLIOTECA_DIR = process.env.BIBLIOTECA_DIR || '/home/arkantu/Documentos/Zotero Biblioteca';
+const ZOTERO_DB = process.env.ZOTERO_DB || '/home/arkantu/Zotero/zotero.sqlite';
 const PDF_INDEX_FILE = path.join(__dirname, 'pdf-text-index.json');
 
 console.log('🌐 Iniciando servidor Zotero mejorado...');
@@ -113,36 +113,57 @@ function performOCR(pdfPath, callback) {
 
 // Procesar cola de indexación
 async function processIndexingQueue() {
-    if (indexingQueue.length === 0 || stats.isIndexing) {
+    if (indexingQueue.length === 0) {
+        stats.isIndexing = false;
         return;
+    }
+    
+    if (stats.isIndexing) {
+        return; // Ya hay un proceso en curso
     }
     
     stats.isIndexing = true;
     currentIndexing = indexingQueue.shift();
-    indexingProgress.total = indexingQueue.length + 1;
-    indexingProgress.current = 0;
+    indexingProgress.total = stats.totalPDFs;
+    indexingProgress.current = stats.indexedPDFs;
     
-    console.log(`🔍 Indexando: ${currentIndexing}`);
+    console.log(`🔍 Indexando: ${path.basename(currentIndexing)} (${indexingProgress.current + 1}/${indexingProgress.total})`);
     
     extractPDFText(currentIndexing, (err, text) => {
-        if (!err && text) {
+        if (!err && text && text.trim().length > 0) {
             pdfTextIndex[currentIndexing] = {
                 text: text,
                 indexed: new Date(),
                 size: text.length
             };
             stats.indexedPDFs++;
+            console.log(`✅ Indexado: ${path.basename(currentIndexing)} (${text.length} caracteres)`);
+        } else {
+            // Marcar como procesado aunque no tenga texto
+            pdfTextIndex[currentIndexing] = {
+                text: '',
+                indexed: new Date(),
+                size: 0,
+                error: 'Sin texto extraíble'
+            };
+            console.log(`⚠️ Sin texto: ${path.basename(currentIndexing)} (OCR no disponible)`);
         }
         
-        indexingProgress.current++;
-        currentIndexing = null;
+        indexingProgress.current = stats.indexedPDFs;
         
         // Guardar cada 10 archivos procesados
-        if (stats.indexedPDFs % 10 === 0) {
+        if (Object.keys(pdfTextIndex).length % 10 === 0) {
             savePDFIndex();
         }
         
-        setTimeout(processIndexingQueue, 1000); // Pausa de 1s entre indexaciones
+        // Emitir actualización de estadísticas
+        io.emit('stats-update', getStats());
+        
+        currentIndexing = null;
+        stats.isIndexing = false;
+        
+        // Continuar con el siguiente archivo después de una pausa
+        setTimeout(processIndexingQueue, 500);
     });
 }
 
@@ -296,13 +317,29 @@ app.get('/biblioteca/*', async (req, res) => {
         const stats = fs.statSync(fullPath);
         console.log(`📊 Tamaño del archivo: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
         
-        // Si el archivo es muy grande (>50MB), devolver enlace de descarga en lugar de servir directamente
-        if (stats.size > 50 * 1024 * 1024) {
+        // Si el archivo es extremadamente grande (>200MB), ofrecer descarga directa
+        if (stats.size > 200 * 1024 * 1024) {
             console.log(`⚠️ Archivo muy grande, redirigiendo descarga: ${path.basename(fullPath)}`);
             return res.json({ 
                 message: 'Archivo muy grande para visualizar en línea',
                 downloadUrl: `/biblioteca/${relativePath}?download=1`,
-                size: `${(stats.size / 1024 / 1024).toFixed(2)} MB`
+                size: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
+                recommendation: 'Se recomienda descargar para mejor rendimiento'
+            });
+        }
+        
+        // Para archivos grandes (50-200MB), añadir headers de streaming y advertencia
+        const isLargeFile = stats.size > 50 * 1024 * 1024;
+        if (isLargeFile && !req.query.download && !req.query.force) {
+            console.log(`⚠️ Archivo grande, ofreciendo opciones: ${path.basename(fullPath)}`);
+            return res.json({ 
+                message: 'Archivo grande detectado',
+                size: `${(stats.size / 1024 / 1024).toFixed(2)} MB`,
+                options: {
+                    viewOnline: `/biblioteca/${relativePath}?force=1`,
+                    download: `/biblioteca/${relativePath}?download=1`
+                },
+                warning: 'La visualización en línea puede ser lenta para archivos grandes'
             });
         }
         
@@ -310,6 +347,31 @@ app.get('/biblioteca/*', async (req, res) => {
         res.setHeader('Content-Type', 'application/pdf');
         res.setHeader('Content-Disposition', req.query.download ? 'attachment' : 'inline');
         res.setHeader('Content-Length', stats.size);
+        
+        // Para archivos grandes, agregar headers de optimización
+        if (isLargeFile) {
+            res.setHeader('Accept-Ranges', 'bytes');
+            res.setHeader('Cache-Control', 'public, max-age=3600'); // Cache por 1 hora
+            console.log(`📡 Sirviendo archivo grande con optimizaciones: ${path.basename(fullPath)}`);
+        }
+        
+        // Manejar Range requests para archivos grandes
+        const range = req.headers.range;
+        if (range && isLargeFile) {
+            const positions = range.replace(/bytes=/, "").split("-");
+            const start = parseInt(positions[0], 10);
+            const end = positions[1] ? parseInt(positions[1], 10) : stats.size - 1;
+            const chunksize = (end - start) + 1;
+            
+            res.status(206);
+            res.setHeader('Content-Range', `bytes ${start}-${end}/${stats.size}`);
+            res.setHeader('Content-Length', chunksize);
+            
+            const stream = fs.createReadStream(fullPath, { start, end });
+            stream.pipe(res);
+            console.log(`✅ Sirviendo rango ${start}-${end} de ${path.basename(fullPath)}`);
+            return;
+        }
         
         // Servir el archivo
         res.sendFile(fullPath, (err) => {
@@ -476,6 +538,10 @@ async function initialize() {
     // Configurar vigilancia de archivos - DESHABILITADO
     // setupFileWatcher(); // Deshabilitado para evitar error ENOSPC con tantos archivos
     console.log('⚠️ File watchers deshabilitados para evitar límite del sistema. Usa el botón "Actualizar" para sincronizar.');
+    
+    // Actualizar estado ya que no hay watchers automáticos
+    stats.syncStatus = 'Listo';
+    stats.lastSync = new Date();
     
     // Iniciar procesamiento de cola
     setTimeout(processIndexingQueue, 2000);
