@@ -2,6 +2,29 @@
 
 Todas las modificaciones notables a este proyecto serán documentadas en este archivo.
 
+## [0.3.1] - 2024-12-20
+
+### 🐛 Corregido
+- **Problema crítico**: Indexación bloqueada en archivo 100 - ahora continúa automáticamente
+- La cola de indexación ahora se auto-reabastece con archivos pendientes
+- Procesamiento interrumpido después de los primeros 100 archivos
+
+### ✨ Añadido
+- Función `continueIndexing()` para procesamiento automático continuo
+- Endpoint `POST /api/sync` para sincronización manual forzada
+- Auto-continuación de indexación cuando la cola está vacía
+- Procesamiento en lotes de 50 archivos para mejor estabilidad
+
+### 🔧 Modificado
+- `processIndexingQueue()` intenta continuar automáticamente cuando termina
+- Logging mejorado con mensajes de progreso y finalización
+- Pausa de 2 segundos entre lotes para evitar sobrecarga del sistema
+
+### 📝 Notas técnicas
+- Mantiene compatibilidad completa con versión 0.3.0
+- El endpoint `/api/sync` permite control manual del proceso
+- Archivos se procesan en lotes para mantener rendimiento óptimo
+
 ## [0.3.0] - 2024-12-20
 
 ### ✨ Añadido
