@@ -34,6 +34,9 @@ services:
       - "com.neuropedialab.version=2.0"
       - "com.neuropedialab.description=Servidor web para biblioteca Zotero"
     
+    # Usar script optimizado de memoria en lugar del servidor por defecto
+    command: ["./start-memory-optimized-docker.sh"]
+    
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/stats"]
       interval: 30s

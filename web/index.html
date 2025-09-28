@@ -189,6 +189,12 @@
             text-align: center;
         }
         
+        .pdf-count {
+            opacity: 0.7;
+            font-size: 0.85em;
+            margin-left: 0.3rem;
+        }
+        
         .tree-children {
             margin-left: 1rem;
             border-left: 1px solid #e0e0e0;
@@ -608,15 +614,16 @@
                 const data = await response.json();
                 console.log('📊 Datos procesados:', {
                     hasError: !!data.error,
-                    hasTree: !!data.tree,
-                    treeLength: data.tree ? data.tree.length : 'N/A'
+                    hasRoot: !!data.root,
+                    hasChildren: !!(data.root && data.root.children),
+                    childrenLength: (data.root && data.root.children) ? data.root.children.length : 'N/A'
                 });
                 
                 if (data.error) {
                     throw new Error(data.error);
                 }
                 
-                folderTree = data.tree || [];
+                folderTree = (data.root && data.root.children) || [];
                 console.log(`✅ Estructura cargada: ${folderTree.length} elementos`);
                 
                 renderFolderTree(folderTree);
@@ -673,7 +680,7 @@
                     itemDiv.innerHTML = `
                         <div class="tree-folder" data-path="${item.path}">
                             <span class="tree-icon">📁</span>
-                            ${item.name} ${item.children ? `(${item.children.length})` : ''}
+                            ${item.name} <span class="pdf-count">(${item.pdfCount || 0} PDFs)</span>
                         </div>
                         <div class="tree-children" data-path="${item.path}"></div>
                     `;
@@ -683,6 +690,7 @@
                     
                     folderEl.addEventListener('click', () => {
                         toggleFolder(folderEl, childrenEl, item.children);
+                        loadFolderFiles(item.path, item.name);
                     });
                 } else {
                     const indexedClass = item.indexed ? 'file-indexed' : 'file-not-indexed';
@@ -728,38 +736,139 @@
             }
         }
 
+        // Cambiar pestaña
+        function showTab(tabName) {
+            // Remover clase activa de todas las pestañas
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.style.display = 'none';
+            });
+            
+            // Activar pestaña seleccionada
+            document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
+            document.getElementById(tabName + 'Tab').style.display = 'block';
+        }
+
+        // Cargar archivos de una carpeta
+        async function loadFolderFiles(folderPath, folderName) {
+            try {
+                console.log(`📁 Cargando archivos de: ${folderPath}`);
+                
+                elements.folderContent.innerHTML = '<div class="loading">🔍 Cargando archivos...</div>';
+                
+                // Cambiar a la pestaña de navegación si no está activa
+                showTab('folders');
+                
+                // Construir la URL con el parámetro de carpeta
+                const url = folderPath ? 
+                    `${API_BASE}/api/pdfs?folder=${encodeURIComponent(folderPath)}&limit=100` : 
+                    `${API_BASE}/api/pdfs?limit=100`;
+                
+                const response = await fetch(url);
+                
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                console.log(`📊 Archivos encontrados: ${data.files.length} de ${data.total}`);
+                
+                if (data.files.length === 0) {
+                    elements.folderContent.innerHTML = `
+                        <div class="no-results">
+                            📁 <strong>${folderName || 'Carpeta seleccionada'}</strong>
+                            <br>No hay archivos PDF en esta carpeta
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Filtrar solo los archivos que están realmente en esta carpeta
+                const folderFiles = folderPath ? 
+                    data.files.filter(file => {
+                        const relativePath = file.path.replace('/app/data/biblioteca/', '');
+                        const fileFolder = relativePath.includes('/') ? 
+                            relativePath.substring(0, relativePath.lastIndexOf('/')) : '';
+                        return fileFolder === folderPath;
+                    }) : data.files;
+                
+                if (folderFiles.length === 0) {
+                    elements.folderContent.innerHTML = `
+                        <div class="no-results">
+                            📁 <strong>${folderName || 'Carpeta seleccionada'}</strong>
+                            <br>No hay archivos PDF directamente en esta carpeta
+                            <br><small>Los archivos pueden estar en subcarpetas</small>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Renderizar los archivos
+                const filesHtml = folderFiles.map(file => {
+                    const indexedClass = file.indexed ? 'file-indexed' : 'file-not-indexed';
+                    const indexedIcon = file.indexed ? '✅' : '⏳';
+                    const fileSizeText = file.size > 0 ? 
+                        `(${(file.size / (1024 * 1024)).toFixed(1)} MB)` : '(0 MB)';
+                    
+                    return `
+                        <div class="result ${indexedClass}" data-path="${file.path}">
+                            <div class="result-title" onclick="openFile('${file.path.replace('/app/data/biblioteca/', '')}')">
+                                ${indexedIcon} ${file.name}
+                            </div>
+                            <div class="result-path">
+                                📁 ${file.path.replace('/app/data/biblioteca/', '')} ${fileSizeText}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                
+                elements.folderContent.innerHTML = `
+                    <div style="margin-bottom: 1rem; font-size: 0.9rem; color: #7f8c8d;">
+                        📁 <strong>${folderName || 'Carpeta seleccionada'}</strong>
+                        <br>${folderFiles.length} archivo${folderFiles.length !== 1 ? 's' : ''} encontrado${folderFiles.length !== 1 ? 's' : ''}
+                    </div>
+                    ${filesHtml}
+                `;
+                
+            } catch (error) {
+                console.error('❌ Error cargando archivos de carpeta:', error);
+                elements.folderContent.innerHTML = `
+                    <div class="error-message">
+                        Error cargando archivos: ${error.message}
+                        <br><button onclick="loadFolderFiles('${folderPath}', '${folderName}')" style="margin-top: 10px;">🔄 Reintentar</button>
+                    </div>
+                `;
+            }
+        }
+
         // Abrir archivo
         async function openFile(filePath) {
             try {
                 console.log('🔍 Abriendo archivo:', filePath);
                 
-                // Primero, hacer una solicitud para verificar el tamaño
-                const checkResponse = await fetch(`${API_BASE}/biblioteca/${filePath}`);
+                // Limpiar la ruta del archivo (remover el prefijo del contenedor)
+                const cleanPath = filePath.replace('/app/data/biblioteca/', '');
+                console.log('🔄 Ruta limpia:', cleanPath);
+                
+                // Usar el endpoint /pdf/ en lugar de /biblioteca/
+                const checkResponse = await fetch(`${API_BASE}/pdf/${encodeURIComponent(cleanPath)}`);
                 
                 if (!checkResponse.ok) {
                     throw new Error(`Error HTTP: ${checkResponse.status}`);
                 }
                 
-                const contentType = checkResponse.headers.get('content-type');
-                
-                // Si es JSON, significa que hay información sobre el archivo (probablemente grande)
-                if (contentType && contentType.includes('application/json')) {
-                    const data = await checkResponse.json();
-                    
-                    if (data.options) {
-                        // Archivo grande con opciones
-                        showLargeFileDialog(filePath, data);
-                        return;
-                    } else if (data.downloadUrl) {
-                        // Archivo muy grande, solo descarga
-                        showVeryLargeFileDialog(filePath, data);
-                        return;
-                    }
+                // Verificar el tamaño del archivo
+                const contentLength = parseInt(checkResponse.headers.get('content-length') || '0');
+                if (contentLength > 50 * 1024 * 1024) { // 50MB
+                    // Archivo grande, mostrar modal de confirmación
+                    showLargeFileModal(cleanPath, (contentLength / (1024 * 1024)).toFixed(1));
+                } else {
+                    // Archivo normal, abrir directamente
+                    const url = `${API_BASE}/pdf/${encodeURIComponent(cleanPath)}`;
+                    window.open(url, '_blank');
                 }
-                
-                // Archivo normal o forzado, abrir directamente
-                const url = `${API_BASE}/biblioteca/${filePath}`;
-                window.open(url, '_blank');
                 
             } catch (error) {
                 console.error('❌ Error abriendo archivo:', error);
@@ -827,15 +936,48 @@
             document.body.appendChild(modal);
         }
         
+        // Mostrar modal para archivos grandes
+        function showLargeFileModal(filePath, sizeMB) {
+            const modal = document.createElement('div');
+            modal.style.cssText = `
+                position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+                background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center;
+                z-index: 10000;
+            `;
+            
+            modal.innerHTML = `
+                <div style="background: white; padding: 20px; border-radius: 8px; max-width: 500px; text-align: center;">
+                    <h3>📄 Archivo Grande Detectado</h3>
+                    <p><strong>Tamaño:</strong> ${sizeMB} MB</p>
+                    <p>Este archivo es grande. ¿Cómo deseas abrirlo?</p>
+                    <div style="margin-top: 20px;">
+                        <button onclick="openFileForced('${filePath}')" style="margin: 5px; padding: 10px 15px; background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            🌐 Ver en línea
+                        </button>
+                        <button onclick="downloadFile('${filePath}')" style="margin: 5px; padding: 10px 15px; background: #28a745; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            📥 Descargar
+                        </button>
+                        <button onclick="this.closest('div[style*=position]').remove()" style="margin: 5px; padding: 10px 15px; background: #dc3545; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                            ❌ Cancelar
+                        </button>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+        }
+
         // Funciones auxiliares para los modales
         function openFileForced(filePath) {
-            const url = `${API_BASE}/biblioteca/${filePath}?force=1`;
+            const cleanPath = filePath.replace('/app/data/biblioteca/', '');
+            const url = `${API_BASE}/pdf/${encodeURIComponent(cleanPath)}?force=1`;
             window.open(url, '_blank');
             document.querySelector('div[style*="position: fixed"]').remove();
         }
         
         function downloadFile(filePath) {
-            const url = `${API_BASE}/biblioteca/${filePath}?download=1`;
+            const cleanPath = filePath.replace('/app/data/biblioteca/', '');
+            const url = `${API_BASE}/pdf/${encodeURIComponent(cleanPath)}?download=1`;
             window.open(url, '_blank');
             document.querySelector('div[style*="position: fixed"]').remove();
         }
@@ -933,7 +1075,7 @@
                     <div class="result-item" onclick="openFile('${result.path}')">
                         <div class="result-title">📄 ${result.file}</div>
                         <div class="result-context">${context}</div>
-                        <div class="result-path">📁 ${result.path}</div>
+                        <div class="result-path">📁 ${result.path.replace('/app/data/biblioteca/', '')}</div>
                     </div>
                 `;
             }).join('');
@@ -998,6 +1140,17 @@
             checkDevMode();
             initializeSocket();
             loadFolderTree();
+            initializeTabs();
+        }
+
+        // Inicializar pestañas
+        function initializeTabs() {
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const tabName = tab.getAttribute('data-tab');
+                    showTab(tabName);
+                });
+            });
         }
 
         // Manejar errores globales

@@ -1,11 +1,20 @@
 # Dockerfile para Servidor Zotero Web - NeuropediaLab 2025
-# Versión mínima sin dependencias externas
+# Versión con soporte completo para OCR
 FROM node:18-alpine
 
 # Información del contenedor
 LABEL maintainer="NeuropediaLab"
-LABEL description="Servidor web para acceso y búsqueda en biblioteca Zotero con indexación de texto completo"
-LABEL version="2.0"
+LABEL description="Servidor web para acceso y búsqueda en biblioteca Zotero con indexación de texto completo y OCR"
+LABEL version="2.1"
+
+# Instalar herramientas necesarias para OCR
+RUN apk add --no-cache \
+    tesseract-ocr \
+    tesseract-ocr-data-spa \
+    tesseract-ocr-data-eng \
+    poppler-utils \
+    imagemagick \
+    ghostscript
 
 # Crear usuario no-root
 RUN addgroup -g 1001 -S nodejs && \
@@ -23,8 +32,11 @@ RUN npm ci --only=production && npm cache clean --force
 # Copiar código fuente
 COPY . .
 
+# Copiar y dar permisos al script de inicio
+RUN chmod +x start-memory-optimized-docker.sh
+
 # Crear directorios necesarios y establecer permisos
-RUN mkdir -p logs web data data/biblioteca data/storage && \
+RUN mkdir -p logs web data data/biblioteca data/storage data/cache && \
     chown -R zotero:nodejs /app
 
 # Cambiar al usuario no-root
@@ -39,5 +51,5 @@ ENV PORT=8080
 ENV BIBLIOTECA_DIR=/app/data/biblioteca
 ENV ZOTERO_DB=/app/data/zotero.sqlite
 
-# Usar el servidor sin watchers para evitar problemas de límites en contenedores
-CMD ["node", "enhanced-server-no-watchers.js"]
+# Usar el script de inicio optimizado para memoria
+CMD ["./start-memory-optimized-docker.sh"]
