@@ -510,68 +510,19 @@
             apiInfo: document.getElementById('apiInfo')
         };
 
-        // Inicializar Socket.IO con reconexión
-        function initializeSocket() {
-            try {
-                socket = io({
-                    transports: ['websocket', 'polling'],
-                    upgrade: true,
-                    reconnection: true,
-                    reconnectionDelay: 2000,
-                    reconnectionAttempts: 5
-                });
-                
-                socket.on('connect', () => {
-                    console.log('✅ Socket.IO conectado');
-                    updateConnectionStatus('connected');
-                    retryCount = 0;
-                });
-                
-                socket.on('disconnect', () => {
-                    console.log('❌ Socket.IO desconectado');
-                    updateConnectionStatus('disconnected');
-                    // Fallback a polling manual
-                    startManualPolling();
-                });
-                
-                socket.on('stats-update', (stats) => {
-                    currentStats = stats;
-                    updateStats(stats);
-                });
-                
-                socket.on('file-added', (data) => {
-                    console.log('📄 Archivo añadido:', data.path);
-                    loadFolderTree();
-                });
-                
-                socket.on('file-removed', (data) => {
-                    console.log('🗑️ Archivo eliminado:', data.path);
-                    loadFolderTree();
-                });
-                
-            } catch (error) {
-                console.error('❌ Error inicializando Socket.IO:', error);
-                updateConnectionStatus('error');
-                // Fallback a polling manual
-                startManualPolling();
-            }
-        }
-
-        // Fallback: polling manual de estadísticas si Socket.IO falla
-        function startManualPolling() {
-            console.log('🔄 Iniciando polling manual de estadísticas...');
+        // Sistema de estadísticas simplificado v0.2 (sin Socket.IO)
+        function initializeStats() {
+            console.log('📊 Inicializando sistema estadísticas REST...');
             
             // Cargar estadísticas inmediatamente
             loadStatsManually();
             
-            // Polling cada 10 segundos
-            if (!window.manualPollingInterval) {
-                window.manualPollingInterval = setInterval(() => {
-                    if (!socket || !socket.connected) {
-                        loadStatsManually();
-                    }
-                }, 10000);
-            }
+            // Polling cada 15 segundos
+            setInterval(() => {
+                loadStatsManually();
+            }, 15000);
+            
+            updateConnectionStatus('connected');
         }
 
         // Cargar estadísticas manualmente via API REST
@@ -1175,13 +1126,11 @@
 
         // Inicializar aplicación
         function initializeApp() {
-            console.log('🚀 Inicializando aplicación...');
+            console.log('🚀 Inicializando aplicación v0.2 (REST only)...');
             checkDevMode();
             
-            // Cargar estadísticas iniciales antes de Socket.IO
-            loadStatsManually();
-            
-            initializeSocket();
+            // Sistema simplificado sin Socket.IO
+            initializeStats();
             loadFolderTree();
             initializeTabs();
         }
@@ -1208,16 +1157,10 @@
         // Inicializar cuando el DOM esté listo
         document.addEventListener('DOMContentLoaded', initializeApp);
         
-        // Recargar datos periódicamente
+        // Recargar datos periódicamente (REST only)
         setInterval(() => {
-            if (socket && socket.connected) {
-                // El socket ya maneja las actualizaciones en tiempo real
-            } else {
-                // Reintentar conexión si está desconectado
-                if (!socket || !socket.connected) {
-                    initializeSocket();
-                }
-            }
+            // Sistema REST no necesita verificar Socket.IO
+            loadStatsManually();
         }, 30000);
     </script>
 </body>

@@ -5,18 +5,8 @@ const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const { exec } = require('child_process');
 const EventEmitter = require('events');
-const { createServer } = require('http');
-const socketIo = require('socket.io');
 
 const app = express();
-const server = createServer(app);
-const io = socketIo(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST"]
-    }
-});
-
 const PORT = process.env.PORT || 8080;
 
 // Configurar límites de memoria Node.js
@@ -308,8 +298,6 @@ function processIndexingQueue() {
         // Guardar cada 5 archivos
         if (pdfTextIndex.size % 5 === 0) {
             savePDFIndex();
-            // Emitir actualización de estadísticas
-            broadcastStats();
         }
         
         stats.indexedPDFs = pdfTextIndex.size;
@@ -321,7 +309,6 @@ function processIndexingQueue() {
         setTimeout(() => {
             if (global.gc && pdfTextIndex.size % 50 === 0) {
                 global.gc();
-                broadcastStats(); // Actualizar después de GC
             }
             processIndexingQueue();
         }, 1000);
@@ -656,16 +643,11 @@ async function initServer() {
 
 // Iniciar servidor
 initServer().then(() => {
-    server.listen(PORT, () => {
+    app.listen(PORT, () => {
         console.log(`🌟 Servidor iniciado en http://localhost:${PORT}`);
         console.log(`📁 Biblioteca: ${BIBLIOTECA_DIR}`);
         console.log(`🗄️ Storage: ${STORAGE_DIR}`);
-        console.log(`🔌 Socket.IO habilitado para ${connectedClients} clientes`);
-        
-        // Emitir estadísticas cada 30 segundos
-        setInterval(() => {
-            broadcastStats();
-        }, 30000);
+        console.log(`📊 Sistema estadísticas: REST API + Polling manual`);
     });
 });
 
