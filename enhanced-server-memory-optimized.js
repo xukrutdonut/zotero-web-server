@@ -20,7 +20,8 @@ const WEB_DIR = path.join(__dirname, 'web');
 const STORAGE_DIR = process.env.STORAGE_DIR || '/home/arkantu/Zotero/storage';
 const BIBLIOTECA_DIR = process.env.BIBLIOTECA_DIR || '/home/arkantu/Documentos/Zotero Biblioteca';
 const ZOTERO_DB = process.env.ZOTERO_DB || '/home/arkantu/Zotero/zotero.sqlite';
-const PDF_INDEX_FILE = path.join(__dirname, 'pdf-text-index.json');
+const CACHE_DIR = process.env.CACHE_DIR || path.join(__dirname, 'data', 'cache');
+const PDF_INDEX_FILE = path.join(CACHE_DIR, 'pdf-text-index.json');
 
 console.log('🌐 Iniciando servidor Zotero mejorado...');
 
@@ -611,6 +612,12 @@ app.get('/pdf/:filename(*)', (req, res) => {
 async function initServer() {
     console.log('🚀 Inicializando servidor...');
     
+    // Crear directorio de caché si no existe
+    if (!fs.existsSync(CACHE_DIR)) {
+        fs.mkdirSync(CACHE_DIR, { recursive: true });
+        console.log(`📁 Creado directorio de caché: ${CACHE_DIR}`);
+    }
+    
     loadPDFIndex();
     console.log(`📚 Cargado índice de ${pdfTextIndex.size} PDFs`);
     
@@ -647,6 +654,7 @@ initServer().then(() => {
         console.log(`🌟 Servidor iniciado en http://localhost:${PORT}`);
         console.log(`📁 Biblioteca: ${BIBLIOTECA_DIR}`);
         console.log(`🗄️ Storage: ${STORAGE_DIR}`);
+        console.log(`💾 Caché persistente: ${CACHE_DIR}`);
         console.log(`📊 Sistema estadísticas: REST API + Polling manual`);
     });
 });

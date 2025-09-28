@@ -17,6 +17,7 @@ services:
       - PORT=8080
       - BIBLIOTECA_DIR=/app/data/biblioteca
       - ZOTERO_DB=/app/data/zotero.sqlite
+      - CACHE_DIR=/app/data/cache
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-zotero-neuropedialab-docker-2024}
     
     volumes:
@@ -31,8 +32,8 @@ services:
     
     labels:
       - "com.neuropedialab.service=zotero-web-server"
-      - "com.neuropedialab.version=2.0"
-      - "com.neuropedialab.description=Servidor web para biblioteca Zotero"
+      - "com.neuropedialab.version=0.3.0"
+      - "com.neuropedialab.description=Servidor web para biblioteca Zotero con persistencia de indexación"
     
     # Usar script optimizado de memoria en lugar del servidor por defecto
     command: ["./start-memory-optimized-docker.sh"]
@@ -67,4 +68,5 @@ volumes:
   zotero-data:
     driver: local
     labels:
-      - "com.neuropedialab.volume=zotero-data"
+      - "com.neuropedialab.volume=zotero-persistent-cache"
+      - "com.neuropedialab.version=0.3.0"

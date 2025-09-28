@@ -1,6 +1,11 @@
-# Zotero Web Server
+# Zotero Web Server v0.3.0
 
 Servidor web avanzado para acceder a tu biblioteca de Zotero con indexación de texto e IA.
+
+## 🆕 Nuevo en v0.3.0
+- ✅ **Persistencia de indexación**: El índice de PDFs se conserva al reiniciar el contenedor
+- 💾 **Volumen persistente**: Docker Compose configurado con volumen `zotero-data` para caché
+- 📁 **Caché inteligente**: Los archivos de índice se almacenan en directorio persistente
 
 ## 🚀 Inicio Rápido con Docker
 
