@@ -97,6 +97,41 @@ function savePDFIndex() {
     }
 }
 
+// Función para continuar indexando archivos no procesados
+function continueIndexing() {
+    if (stats.isIndexing) {
+        console.log('🔄 Indexación ya en progreso...');
+        return false;
+    }
+
+    try {
+        const libraryFiles = getLibraryPDFs(BIBLIOTECA_DIR, 1, 10000);
+        const unindexedFiles = libraryFiles.files.filter(file => !file.indexed);
+        
+        if (unindexedFiles.length === 0) {
+            console.log('✅ Todos los archivos están indexados');
+            return false;
+        }
+
+        console.log(`🔄 Continuando indexación: ${unindexedFiles.length} archivos pendientes`);
+        
+        // Añadir archivos no indexados a la cola (máximo 50 por lote)
+        const batchSize = Math.min(unindexedFiles.length, 50);
+        for (let i = 0; i < batchSize; i++) {
+            addToIndexingQueue(unindexedFiles[i].path);
+        }
+        
+        stats.totalPDFs = libraryFiles.total;
+        indexingProgress.total = stats.totalPDFs;
+        
+        return true;
+        
+    } catch (error) {
+        console.error('Error continuando indexación:', error);
+        return false;
+    }
+}
+
 // Función para extraer texto de PDF con control de memoria y soporte OCR mejorado v0.2
 function extractPDFText(pdfPath, callback) {
     try {
@@ -264,6 +299,15 @@ function tryOCRImproved(pdfPath, callback) {
 // Procesamiento optimizado de cola de indexación
 function processIndexingQueue() {
     if (currentIndexing || indexingQueue.length === 0) {
+        // Si no hay archivos en cola, intentar continuar con más archivos
+        if (!currentIndexing && indexingQueue.length === 0) {
+            setTimeout(() => {
+                const continued = continueIndexing();
+                if (!continued) {
+                    console.log('🏁 Indexación completada');
+                }
+            }, 2000);
+        }
         return;
     }
 
@@ -608,6 +652,46 @@ app.get('/pdf/:filename(*)', (req, res) => {
     }
 });
 
+// Endpoint para sincronización manual de archivos
+app.post('/api/sync', (req, res) => {
+    try {
+        console.log('🔄 Iniciando sincronización manual...');
+        
+        if (stats.isIndexing) {
+            return res.status(409).json({ 
+                error: 'Indexación ya en progreso',
+                isIndexing: true,
+                progress: indexingProgress
+            });
+        }
+
+        const continued = continueIndexing();
+        
+        if (continued) {
+            res.json({ 
+                success: true,
+                message: 'Sincronización iniciada',
+                isIndexing: stats.isIndexing,
+                progress: indexingProgress,
+                totalPDFs: stats.totalPDFs,
+                indexedPDFs: stats.indexedPDFs
+            });
+        } else {
+            res.json({
+                success: true,
+                message: 'Todos los archivos ya están indexados',
+                isIndexing: false,
+                totalPDFs: stats.totalPDFs,
+                indexedPDFs: stats.indexedPDFs
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error en sincronización:', error);
+        res.status(500).json({ error: 'Error iniciando sincronización' });
+    }
+});
+
 // Inicialización del servidor
 async function initServer() {
     console.log('🚀 Inicializando servidor...');
@@ -638,7 +722,7 @@ async function initServer() {
         });
         
         indexingProgress.total = stats.totalPDFs;
-        console.log(`⚠️ File watchers deshabilitados para evitar límite del sistema. Usa el botón "Actualizar" para sincronizar.`);
+        console.log(`⚠️ Procesando en lotes de 100 archivos. Para continuar la indexación, usa POST /api/sync o espera a que se procese automáticamente.`);
         
     } catch (error) {
         console.error('Error inicializando:', error);
