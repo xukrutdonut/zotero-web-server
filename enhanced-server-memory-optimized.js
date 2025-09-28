@@ -96,14 +96,27 @@ function savePDFIndex() {
     }
 }
 
-// Función para extraer texto de PDF con control de memoria y soporte OCR
+// Función para extraer texto de PDF con control de memoria y soporte OCR mejorado v0.2
 function extractPDFText(pdfPath, callback) {
     try {
         const pdfparse = require('pdf-parse');
         
-        // Verificar tamaño del archivo
+        // Verificar tamaño del archivo ANTES de procesarlo
         const stats = fs.statSync(pdfPath);
         const fileSizeInMB = stats.size / (1024 * 1024);
+        
+        // NUEVO: Detectar archivos vacíos o corruptos
+        if (stats.size === 0) {
+            console.log(`🚫 Archivo vacío (0 bytes), saltando: ${path.basename(pdfPath)}`);
+            callback('Archivo vacío', null);
+            return;
+        }
+        
+        if (stats.size < 1024) { // Menor a 1KB, probablemente corrupto
+            console.log(`🚫 Archivo muy pequeño (${stats.size} bytes), probablemente corrupto: ${path.basename(pdfPath)}`);
+            callback('Archivo posiblemente corrupto', null);
+            return;
+        }
         
         if (fileSizeInMB > 100) {
             console.log(`⚠️ Archivo muy grande (${fileSizeInMB.toFixed(1)}MB), saltando: ${path.basename(pdfPath)}`);
@@ -111,13 +124,21 @@ function extractPDFText(pdfPath, callback) {
             return;
         }
         
+        // NUEVO: Verificar que sea realmente un PDF válido
         const buffer = fs.readFileSync(pdfPath);
+        
+        // Verificar cabecera PDF
+        if (!buffer.toString('ascii', 0, 4).startsWith('%PDF')) {
+            console.log(`🚫 No es un PDF válido, saltando: ${path.basename(pdfPath)}`);
+            callback('Archivo no es PDF válido', null);
+            return;
+        }
         
         pdfparse(buffer).then(function(data) {
             // Si el texto extraído es muy corto, puede que sea un PDF de imágenes
             if (data.text.trim().length < 50) {
                 console.log(`📸 Texto muy corto (${data.text.trim().length} chars), intentando OCR para: ${path.basename(pdfPath)}`);
-                tryOCR(pdfPath, callback);
+                tryOCRImproved(pdfPath, callback);
                 return;
             }
             
@@ -127,50 +148,76 @@ function extractPDFText(pdfPath, callback) {
                 global.gc();
             }
         }).catch(function(error) {
-            console.log(`📸 PDF parse falló, intentando OCR para: ${path.basename(pdfPath)}`);
-            tryOCR(pdfPath, callback);
+            console.log(`📸 PDF parse falló (${error.message}), intentando OCR para: ${path.basename(pdfPath)}`);
+            tryOCRImproved(pdfPath, callback);
         });
         
     } catch (error) {
-        console.log(`📸 Error leyendo PDF, intentando OCR para: ${path.basename(pdfPath)}`);
-        tryOCR(pdfPath, callback);
+        console.log(`📸 Error leyendo PDF (${error.message}), intentando OCR para: ${path.basename(pdfPath)}`);
+        tryOCRImproved(pdfPath, callback);
     }
 }
 
-// Función para intentar OCR con tesseract
-function tryOCR(pdfPath, callback) {
+// Función mejorada para intentar OCR con tesseract v0.2
+function tryOCRImproved(pdfPath, callback) {
     const { exec } = require('child_process');
     const os = require('os');
     const path = require('path');
     
     try {
+        // NUEVO: Pre-validación antes de OCR
+        const stats = fs.statSync(pdfPath);
+        if (stats.size === 0) {
+            console.log(`🚫 Saltando OCR para archivo vacío: ${path.basename(pdfPath)}`);
+            callback('Archivo vacío - OCR saltado', null);
+            return;
+        }
+        
         // Crear directorio temporal
         const tempDir = os.tmpdir();
-        const baseFileName = path.basename(pdfPath, '.pdf');
+        const baseFileName = path.basename(pdfPath, '.pdf').replace(/[^a-zA-Z0-9]/g, '_'); // Sanitizar nombre
         const tempImagePath = path.join(tempDir, `${baseFileName}_page`);
         const tempTextPath = path.join(tempDir, `${baseFileName}_ocr`);
         
-        // Convertir primera página del PDF a imagen usando pdftoppm
-        const convertCmd = `pdftoppm -png -f 1 -l 1 -r 150 "${pdfPath}" "${tempImagePath}"`;
+        // NUEVO: Mejorar comando pdftoppm con validación de PDF
+        const convertCmd = `pdftoppm -png -f 1 -l 1 -r 150 "${pdfPath}" "${tempImagePath}" 2>&1`;
         
-        exec(convertCmd, { timeout: 30000 }, (convertError, convertStdout, convertStderr) => {
+        console.log(`🔧 Intentando conversión OCR para: ${path.basename(pdfPath)}`);
+        
+        exec(convertCmd, { timeout: 60000 }, (convertError, convertStdout, convertStderr) => {
             if (convertError) {
-                console.log(`⚠️ Error convirtiendo a imagen: ${path.basename(pdfPath)} - ${convertError.message}`);
-                callback('Error en conversión a imagen', null);
+                // NUEVO: Clasificar tipos de errores
+                if (convertStderr.includes('Document stream is empty')) {
+                    console.log(`🚫 PDF corrupto detectado: ${path.basename(pdfPath)} - saltando OCR`);
+                    callback('PDF corrupto - OCR saltado', null);
+                } else if (convertStderr.includes('Syntax Error')) {
+                    console.log(`🚫 Error sintaxis PDF: ${path.basename(pdfPath)} - archivo no válido`);
+                    callback('PDF sintaxis inválida - OCR saltado', null);
+                } else {
+                    console.log(`⚠️ Error conversión OCR: ${path.basename(pdfPath)} - ${convertError.message}`);
+                    callback('Error en conversión a imagen', null);
+                }
                 return;
             }
             
             // La imagen se guardará como tempImagePath-1.png
             const imagePath = `${tempImagePath}-1.png`;
             
-            // Ejecutar tesseract OCR
-            const ocrCmd = `tesseract "${imagePath}" "${tempTextPath}" -l spa+eng --dpi 150`;
+            // NUEVO: Verificar que la imagen se creó correctamente
+            if (!fs.existsSync(imagePath)) {
+                console.log(`⚠️ No se generó imagen para OCR: ${path.basename(pdfPath)}`);
+                callback('No se pudo generar imagen para OCR', null);
+                return;
+            }
             
-            exec(ocrCmd, { timeout: 60000 }, (ocrError, ocrStdout, ocrStderr) => {
+            // Ejecutar tesseract OCR con configuración optimizada
+            const ocrCmd = `tesseract "${imagePath}" "${tempTextPath}" -l spa+eng --dpi 150 --psm 1 -c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789áéíóúñüÁÉÍÓÚÑÜ.,;:()[]{}\"'-?!@#$%^&*+=<>/\\|_~ `;
+            
+            exec(ocrCmd, { timeout: 120000 }, (ocrError, ocrStdout, ocrStderr) => {
                 try {
                     if (ocrError) {
-                        console.log(`⚠️ Error en OCR: ${path.basename(pdfPath)} - ${ocrError.message}`);
-                        callback('Error en OCR', null);
+                        console.log(`⚠️ Error en OCR Tesseract: ${path.basename(pdfPath)} - ${ocrError.message}`);
+                        callback('Error en OCR Tesseract', null);
                         return;
                     }
                     
@@ -178,7 +225,15 @@ function tryOCR(pdfPath, callback) {
                     const textFilePath = `${tempTextPath}.txt`;
                     if (fs.existsSync(textFilePath)) {
                         const ocrText = fs.readFileSync(textFilePath, 'utf8');
-                        console.log(`✅ OCR completado: ${path.basename(pdfPath)} (${ocrText.length} caracteres)`);
+                        
+                        // NUEVO: Validar calidad del texto OCR
+                        if (ocrText.trim().length < 10) {
+                            console.log(`⚠️ OCR produjo texto muy corto para: ${path.basename(pdfPath)} (${ocrText.length} chars)`);
+                            callback('OCR texto insuficiente', null);
+                        } else {
+                            console.log(`✅ OCR exitoso: ${path.basename(pdfPath)} (${ocrText.length} caracteres)`);
+                            callback(null, ocrText);
+                        }
                         
                         // Limpiar archivos temporales
                         try {
@@ -188,7 +243,6 @@ function tryOCR(pdfPath, callback) {
                             // Ignorar errores de limpieza
                         }
                         
-                        callback(null, ocrText);
                     } else {
                         console.log(`⚠️ No se pudo generar texto OCR para: ${path.basename(pdfPath)}`);
                         callback('No se pudo generar texto OCR', null);
