@@ -298,6 +298,8 @@ function processIndexingQueue() {
         // Guardar cada 5 archivos
         if (pdfTextIndex.size % 5 === 0) {
             savePDFIndex();
+            // Emitir actualización de estadísticas
+            broadcastStats();
         }
         
         stats.indexedPDFs = pdfTextIndex.size;
@@ -309,6 +311,7 @@ function processIndexingQueue() {
         setTimeout(() => {
             if (global.gc && pdfTextIndex.size % 50 === 0) {
                 global.gc();
+                broadcastStats(); // Actualizar después de GC
             }
             processIndexingQueue();
         }, 1000);
@@ -643,10 +646,16 @@ async function initServer() {
 
 // Iniciar servidor
 initServer().then(() => {
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
         console.log(`🌟 Servidor iniciado en http://localhost:${PORT}`);
         console.log(`📁 Biblioteca: ${BIBLIOTECA_DIR}`);
         console.log(`🗄️ Storage: ${STORAGE_DIR}`);
+        console.log(`🔌 Socket.IO habilitado para ${connectedClients} clientes`);
+        
+        // Emitir estadísticas cada 30 segundos
+        setInterval(() => {
+            broadcastStats();
+        }, 30000);
     });
 });
 

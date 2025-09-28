@@ -530,6 +530,8 @@
                 socket.on('disconnect', () => {
                     console.log('❌ Socket.IO desconectado');
                     updateConnectionStatus('disconnected');
+                    // Fallback a polling manual
+                    startManualPolling();
                 });
                 
                 socket.on('stats-update', (stats) => {
@@ -549,6 +551,43 @@
                 
             } catch (error) {
                 console.error('❌ Error inicializando Socket.IO:', error);
+                updateConnectionStatus('error');
+                // Fallback a polling manual
+                startManualPolling();
+            }
+        }
+
+        // Fallback: polling manual de estadísticas si Socket.IO falla
+        function startManualPolling() {
+            console.log('🔄 Iniciando polling manual de estadísticas...');
+            
+            // Cargar estadísticas inmediatamente
+            loadStatsManually();
+            
+            // Polling cada 10 segundos
+            if (!window.manualPollingInterval) {
+                window.manualPollingInterval = setInterval(() => {
+                    if (!socket || !socket.connected) {
+                        loadStatsManually();
+                    }
+                }, 10000);
+            }
+        }
+
+        // Cargar estadísticas manualmente via API REST
+        async function loadStatsManually() {
+            try {
+                const response = await fetch(`${API_BASE}/api/stats`);
+                if (response.ok) {
+                    const stats = await response.json();
+                    currentStats = stats;
+                    updateStats(stats);
+                    updateConnectionStatus('connected');
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                console.error('❌ Error cargando estadísticas:', error);
                 updateConnectionStatus('error');
             }
         }
@@ -1138,6 +1177,10 @@
         function initializeApp() {
             console.log('🚀 Inicializando aplicación...');
             checkDevMode();
+            
+            // Cargar estadísticas iniciales antes de Socket.IO
+            loadStatsManually();
+            
             initializeSocket();
             loadFolderTree();
             initializeTabs();
