@@ -5,8 +5,18 @@ const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const { exec } = require('child_process');
 const EventEmitter = require('events');
+const { createServer } = require('http');
+const socketIo = require('socket.io');
 
 const app = express();
+const server = createServer(app);
+const io = socketIo(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
+
 const PORT = process.env.PORT || 8080;
 
 // Configurar límites de memoria Node.js
