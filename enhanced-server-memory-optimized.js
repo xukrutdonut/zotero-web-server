@@ -431,7 +431,7 @@ function getLibraryPDFs(dir = BIBLIOTECA_DIR, page = 1, limit = 50, folderFilter
     };
 }
 
-// Búsqueda optimizada con límites
+// Búsqueda híbrida optimizada: contenido indexado + nombres de archivo
 function searchInPDFs(query, limit = 50) {
     if (!query || query.trim().length === 0) {
         return [];
@@ -440,6 +440,7 @@ function searchInPDFs(query, limit = 50) {
     const results = [];
     const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 2);
     
+    // 1. Buscar en contenido indexado
     let searchCount = 0;
     for (let [filePath, data] of pdfTextIndex) {
         if (searchCount >= limit) break;
@@ -456,12 +457,45 @@ function searchInPDFs(query, limit = 50) {
                 results.push({
                     file: path.basename(filePath),
                     path: filePath,
-                    score,
-                    snippet: snippet.substring(0, 200) + '...'
+                    score: score + 10, // Bonus por contenido indexado
+                    snippet: snippet.substring(0, 200) + '...',
+                    source: 'content'
                 });
                 searchCount++;
             }
         }
+    }
+
+    // 2. Buscar en nombres de archivo (todos los PDFs, indexados o no)
+    try {
+        const allPdfs = getLibraryPDFs(BIBLIOTECA_DIR, 1, limit * 2);
+        
+        allPdfs.files.forEach(file => {
+            if (searchCount >= limit) return;
+            
+            // Evitar duplicados de archivos ya encontrados por contenido
+            const alreadyFound = results.some(r => r.path === file.path);
+            if (alreadyFound) return;
+            
+            const fileName = path.basename(file.name).toLowerCase();
+            const score = searchTerms.reduce((acc, term) => {
+                const matches = (fileName.match(new RegExp(term, 'g')) || []).length;
+                return acc + matches * 5; // Menor peso que contenido pero mayor que 0
+            }, 0);
+
+            if (score > 0) {
+                results.push({
+                    file: file.name,
+                    path: file.path,
+                    score,
+                    snippet: `Encontrado en nombre de archivo: "${file.name}"`,
+                    source: 'filename'
+                });
+                searchCount++;
+            }
+        });
+    } catch (error) {
+        console.error('Error buscando en nombres de archivo:', error);
     }
 
     return results
@@ -579,7 +613,8 @@ app.get('/api/folder-tree', (req, res) => {
 // Endpoint para búsqueda de texto en PDFs
 app.get('/api/search-text', (req, res) => {
     try {
-        const query = req.query.query;
+        // Aceptar tanto 'q' como 'query' para compatibilidad
+        const query = req.query.q || req.query.query;
         const limit = Math.min(parseInt(req.query.limit) || 50, 100);
         
         if (!query) {
