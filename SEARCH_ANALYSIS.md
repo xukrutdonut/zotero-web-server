@@ -1,43 +1,44 @@
-# 🔍 Análisis búsqueda "desk reference" - v0.2
+# 🔍 Análisis búsqueda - SOLUCIONADO ✅
 
-## 🎯 Estado actual:
+## ✅ **Problemas resueltos:**
 
-### ✅ **Lo que funciona:**
-- API de búsqueda responde correctamente
-- Encuentra 5 resultados por contenido indexado
-- Archivo existe: `American Psychiatric Association - 2013 - Desk reference to the diagnostic criteria from DSM-5.pdf` (1.8MB)
+### **1. Búsqueda híbrida implementada:**
+- ✅ **Búsqueda por contenido indexado** (prioridad alta, score +10)
+- ✅ **Búsqueda por nombre de archivo** (todos los PDFs, indexados o no)
+- ✅ **Sin duplicados** - no se muestran archivos encontrados por ambos métodos
+- ✅ **Ordenamiento por relevancia** - contenido > nombre de archivo
 
-### ❌ **Problema identificado:**
-- **Solo 100/5701 archivos indexados** (1.75%)  
-- El archivo "Desk reference" **no está indexado aún**
-- Búsqueda solo busca en contenido, no en nombres de archivo
+### **2. Endpoints de búsqueda corregidos:**
+- ✅ `/api/search?q=término` - funcionando correctamente
+- ✅ `/api/search-text?q=término` - corregido parámetro de consulta
+- ✅ Compatibilidad con `query` y `q` en ambos endpoints
 
-## 🚀 **Soluciones implementadas:**
-
-### **Opción A: Mejora rápida (5 min)**
-```javascript
-// Agregar búsqueda por nombre archivo al endpoint actual
-// Modificar función searchInPDFs para incluir nombres
+### **3. Respuesta mejorada:**
+```json
+{
+  "results": [
+    {
+      "file": "nombre.pdf",
+      "path": "/ruta/completa/nombre.pdf", 
+      "score": 15,
+      "snippet": "Extracto del contenido...",
+      "source": "content" // o "filename"
+    }
+  ],
+  "total": 1,
+  "query": "término buscado",
+  "limited": false
+}
 ```
 
-### **Opción B: Forzar indexación archivo específico (2 min)**  
-```bash
-# Mover archivo DSM-5 al inicio de cola de indexación
-# Indexar manualmente archivos importantes primero
-```
+## 🚀 **Resultado:**
+- **Búsquedas funcionan inmediatamente** incluso con pocos archivos indexados
+- **Encuentra archivos por nombre** aunque no estén procesados aún
+- **Combina resultados** de contenido y nombres de archivo inteligentemente
+- **Error de búsqueda resuelto** completamente
 
-### **Opción C: Búsqueda híbrida completa (15 min)**
-```javascript
-// Sistema dual: contenido indexado + nombres archivo
-// UI mejorada con indicadores de estado
-```
-
-## 📊 **Recomendación inmediata:**
-
-**Vamos con Opción A + B combinadas:**
-
-1. ✅ Modificar búsqueda para incluir nombres archivo  
-2. ✅ Priorizar indexación archivos importantes
-3. ✅ Usuario puede encontrar "desk reference" inmediatamente
-
-**¿Proceder con implementación rápida?**
+## 🎯 **Casos de uso cubiertos:**
+1. ✅ Buscar "desk reference" → Encuentra archivo por nombre
+2. ✅ Buscar contenido indexado → Prioridad alta en resultados  
+3. ✅ Buscar términos parciales → Funciona en ambos modos
+4. ✅ API consistente → Ambos endpoints compatibles

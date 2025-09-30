@@ -1021,7 +1021,8 @@
             elements.searchResults.innerHTML = '<div class="loading">🔍 Buscando...</div>';
             
             try {
-                const response = await fetch(`${API_BASE}/api/search-text?query=${encodeURIComponent(query)}&limit=50`);
+                // Usar 'q' en lugar de 'query' para compatibilidad
+                const response = await fetch(`${API_BASE}/api/search-text?q=${encodeURIComponent(query)}&limit=50`);
                 
                 if (!response.ok) {
                     throw new Error(`Error HTTP: ${response.status}`);
@@ -1029,15 +1030,16 @@
                 
                 const data = await response.json();
                 
-                if (!data.success) {
-                    throw new Error(data.error || 'Error en la búsqueda');
+                // Verificar si hay error en la respuesta
+                if (data.error) {
+                    throw new Error(data.error);
                 }
                 
-                if (data.results.length === 0) {
+                if (!data.results || data.results.length === 0) {
                     elements.searchResults.innerHTML = `
                         <div class="no-results">
                             No se encontraron resultados para "<strong>${query}</strong>"
-                            <br><small>Solo se busca en documentos indexados (✅)</small>
+                            <br><small>Búsqueda en contenido indexado y nombres de archivo</small>
                         </div>
                     `;
                 } else {
@@ -1056,16 +1058,23 @@
 
         function renderSearchResults(results, query) {
             const highlightedResults = results.map(result => {
-                // Resaltar la query en el contexto
-                let context = result.context;
+                // Usar snippet en lugar de context
+                let context = result.snippet || result.context || 'Sin contexto disponible';
                 const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
                 context = context.replace(regex, '<mark>$1</mark>');
                 
+                // Hacer path más compatible - remover el directorio base
+                let displayPath = result.path;
+                if (displayPath.includes('/')) {
+                    const pathParts = displayPath.split('/');
+                    displayPath = pathParts.slice(-2).join('/'); // Mostrar últimas 2 partes
+                }
+                
                 return `
                     <div class="result-item" onclick="openFile('${result.path}')">
-                        <div class="result-title">📄 ${result.file}</div>
+                        <div class="result-title">📄 ${result.file} <small style="color: #666;">(${result.source || 'contenido'})</small></div>
                         <div class="result-context">${context}</div>
-                        <div class="result-path">📁 ${result.path.replace('/app/data/biblioteca/', '')}</div>
+                        <div class="result-path">📁 ${displayPath}</div>
                     </div>
                 `;
             }).join('');
