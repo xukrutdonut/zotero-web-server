@@ -240,8 +240,8 @@ class PDFIndexingService {
                         const context = indexData.text.substring(start, end);
                         
                         results.push({
-                            fileName: indexData.fileName,
-                            relativePath: indexData.relativePath,
+                            file: indexData.fileName,
+                            path: indexData.pdfPath || indexData.relativePath,
                             context: context,
                             method: indexData.method,
                             wordCount: indexData.wordCount,

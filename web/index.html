@@ -1067,15 +1067,17 @@
         function renderSearchResults(results, query) {
             const highlightedResults = results.map(result => {
                 // Resaltar la query en el contexto
-                let context = result.context;
-                const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
-                context = context.replace(regex, '<mark>$1</mark>');
+                let context = result.context || '';
+                if (context) {
+                    const regex = new RegExp(`(${escapeRegExp(query)})`, 'gi');
+                    context = context.replace(regex, '<mark>$1</mark>');
+                }
                 
                 return `
-                    <div class="result-item" onclick="openFile('${result.path}')">
-                        <div class="result-title">📄 ${result.file}</div>
-                        <div class="result-context">${context}</div>
-                        <div class="result-path">📁 ${result.path.replace('/app/data/biblioteca/', '')}</div>
+                    <div class="result-item" onclick="openFile('${result.path || ''}')">
+                        <div class="result-title">📄 ${result.file || 'Sin nombre'}</div>
+                        <div class="result-context">${context || 'No se encontró contexto'}</div>
+                        <div class="result-path">📁 ${(result.path || '').replace('/app/data/biblioteca/', '')}</div>
                     </div>
                 `;
             }).join('');
