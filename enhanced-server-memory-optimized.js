@@ -1,12 +1,21 @@
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const fs = require('fs-extra');
 const sqlite3 = require('sqlite3').verbose();
 const cors = require('cors');
 const { exec } = require('child_process');
 const EventEmitter = require('events');
+const socketIO = require('socket.io');
 
 const app = express();
+const server = http.createServer(app);
+const io = socketIO(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 const PORT = process.env.PORT || 8080;
 
 // Configurar límites de memoria Node.js
@@ -28,6 +37,23 @@ console.log('🌐 Iniciando servidor Zotero mejorado...');
 app.use(cors());
 app.use(express.json({ limit: '10mb' })); // Reducido de 50mb
 app.use(express.static(WEB_DIR));
+
+// Socket.IO - Manejo de conexiones en tiempo real
+io.on('connection', (socket) => {
+    console.log('✅ Cliente Socket.IO conectado');
+    
+    // Enviar estadísticas iniciales al conectar
+    socket.emit('stats-update', stats);
+    
+    socket.on('disconnect', () => {
+        console.log('❌ Cliente Socket.IO desconectado');
+    });
+});
+
+// Función para emitir actualizaciones de estadísticas a todos los clientes
+function emitStatsUpdate() {
+    io.emit('stats-update', stats);
+}
 
 // Estadísticas globales
 let stats = {
