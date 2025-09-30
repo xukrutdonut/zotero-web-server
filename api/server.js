@@ -546,14 +546,21 @@ app.get('/search-folders/:query', async (req, res) => {
 });
 
 // Rutas para indexación y búsqueda de texto
-app.get('/search-text/:query', async (req, res) => {
+app.get('/api/search-text', async (req, res) => {
     try {
-        const query = req.params.query;
+        const query = req.query.query;
+        if (!query) {
+            return res.json({ success: true, results: [], total: 0 });
+        }
         const results = await pdfIndexingService.searchText(query);
-        res.json(results);
+        res.json({ 
+            success: true,
+            results,
+            total: results.length
+        });
     } catch (error) {
         console.error('Error buscando texto:', error);
-        res.status(500).json({ error: 'Error en búsqueda de texto' });
+        res.status(500).json({ success: false, error: 'Error en búsqueda de texto' });
     }
 });
 

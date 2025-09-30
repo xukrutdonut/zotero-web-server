@@ -484,11 +484,12 @@ app.get('/api/search-text', (req, res) => {
         const limit = Math.min(parseInt(req.query.limit) || 50, 100);
         
         if (!query) {
-            return res.json({ results: [], total: 0 });
+            return res.json({ success: true, results: [], total: 0 });
         }
 
         const results = searchInPDFs(query, limit);
         res.json({ 
+            success: true,
             results, 
             total: results.length,
             query,
@@ -496,7 +497,7 @@ app.get('/api/search-text', (req, res) => {
         });
     } catch (error) {
         console.error('Error en búsqueda de texto:', error);
-        res.status(500).json({ error: 'Error en búsqueda de texto' });
+        res.status(500).json({ success: false, error: 'Error en búsqueda de texto' });
     }
 });
 
@@ -506,11 +507,12 @@ app.get('/api/search', (req, res) => {
         const limit = Math.min(parseInt(req.query.limit) || 50, 100);
         
         if (!query) {
-            return res.json({ results: [], total: 0 });
+            return res.json({ success: true, results: [], total: 0 });
         }
 
         const results = searchInPDFs(query, limit);
         res.json({ 
+            success: true,
             results, 
             total: results.length,
             query,
@@ -518,7 +520,7 @@ app.get('/api/search', (req, res) => {
         });
     } catch (error) {
         console.error('Error en búsqueda:', error);
-        res.status(500).json({ error: 'Error en búsqueda' });
+        res.status(500).json({ success: false, error: 'Error en búsqueda' });
     }
 });
 
