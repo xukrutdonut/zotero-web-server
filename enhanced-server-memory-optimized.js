@@ -438,7 +438,7 @@ function searchInPDFs(query, limit = 50) {
     }
 
     const results = [];
-    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 2);
+    const searchTerms = query.toLowerCase().split(' ').filter(term => term.length > 0);
     
     // 1. Buscar en contenido indexado
     let searchCount = 0;
