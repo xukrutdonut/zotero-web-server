@@ -581,13 +581,61 @@ function countPDFsInDirectory(dir, maxDepth = 3, currentDepth = 0) {
 
 // API Routes
 
+// Cache para estadísticas con timestamp
+let statsCache = {
+    data: null,
+    timestamp: 0,
+    ttl: 10000 // Cache válido por 10 segundos
+};
+
 app.get('/api/stats', (req, res) => {
-    const currentStats = {
-        ...stats,
-        indexedPDFs: pdfTextIndex.size,
-        memoryUsage: process.memoryUsage()
-    };
-    res.json(currentStats);
+    try {
+        const now = Date.now();
+        
+        // Si el cache es válido, usarlo
+        if (statsCache.data && (now - statsCache.timestamp) < statsCache.ttl) {
+            return res.json(statsCache.data);
+        }
+        
+        // Actualizar conteo de PDFs
+        try {
+            const libraryFiles = getLibraryPDFs(BIBLIOTECA_DIR, 1, 10000);
+            stats.totalPDFs = libraryFiles.total;
+        } catch (error) {
+            console.error('Error actualizando conteo de PDFs:', error);
+            // Mantener el valor anterior si hay error
+        }
+        
+        // Actualizar estadísticas
+        stats.indexedPDFs = pdfTextIndex.size;
+        stats.syncStatus = stats.isIndexing ? 'Indexando...' : 'Listo';
+        
+        // Solo actualizar lastSync cuando realmente se actualizaron las estadísticas
+        if (!stats.lastSync || (now - new Date(stats.lastSync).getTime()) > 5000) {
+            stats.lastSync = new Date();
+        }
+        
+        const currentStats = {
+            ...stats,
+            memoryUsage: process.memoryUsage()
+        };
+        
+        // Actualizar cache
+        statsCache.data = currentStats;
+        statsCache.timestamp = now;
+        
+        res.json(currentStats);
+    } catch (error) {
+        console.error('Error en /api/stats:', error);
+        // Enviar stats básicos en caso de error
+        res.json({
+            ...stats,
+            indexedPDFs: pdfTextIndex.size,
+            lastSync: stats.lastSync || new Date(),
+            syncStatus: 'Error',
+            memoryUsage: process.memoryUsage()
+        });
+    }
 });
 
 // Endpoint para obtener estructura de carpetas
