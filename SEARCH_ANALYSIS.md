@@ -7,6 +7,7 @@
 - ✅ **Búsqueda por nombre de archivo** (todos los PDFs, indexados o no)
 - ✅ **Sin duplicados** - no se muestran archivos encontrados por ambos métodos
 - ✅ **Ordenamiento por relevancia** - contenido > nombre de archivo
+- ✅ **Búsqueda con términos cortos** - permite buscar términos de 1-2 caracteres (anteriormente requería 3+ caracteres)
 
 ### **2. Endpoints de búsqueda corregidos:**
 - ✅ `/api/search?q=término` - funcionando correctamente
@@ -42,3 +43,4 @@
 2. ✅ Buscar contenido indexado → Prioridad alta en resultados  
 3. ✅ Buscar términos parciales → Funciona en ambos modos
 4. ✅ API consistente → Ambos endpoints compatibles
+5. ✅ Buscar términos cortos (1-2 caracteres) → "a", "go", "ab" ahora funcionan correctamente
