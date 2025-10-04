@@ -24,12 +24,16 @@ class PDFIndexingService {
         
         // Programar indexación cada 30 minutos durante horas de baja actividad
         cron.schedule('*/30 * * * *', () => {
-            this.processQueue();
+            this.processQueue().catch(err => {
+                console.error('❌ Error en processQueue programado:', err);
+            });
         });
         
         // Hacer scan inicial después de 10 segundos
         setTimeout(() => {
-            this.scanForNewPDFs();
+            this.scanForNewPDFs().catch(err => {
+                console.error('❌ Error en scanForNewPDFs inicial:', err);
+            });
         }, 10000);
         
         console.log('📖 Servicio de indexación PDF inicializado');
@@ -64,7 +68,9 @@ class PDFIndexingService {
             this.indexQueue = [...this.indexQueue, ...newPdfs];
             
             // Procesar cola inmediatamente si hay espacio
-            this.processQueue();
+            this.processQueue().catch(err => {
+                console.error('❌ Error en processQueue inicial:', err);
+            });
             
         } catch (error) {
             console.error('Error escaneando PDFs:', error);
@@ -119,7 +125,11 @@ class PDFIndexingService {
             
             // Procesar siguiente con delay para no saturar
             if (this.indexQueue.length > 0) {
-                setTimeout(() => this.processQueue(), 2000);
+                setTimeout(() => {
+                    this.processQueue().catch(err => {
+                        console.error('❌ Error en processQueue:', err);
+                    });
+                }, 2000);
             }
         }
     }

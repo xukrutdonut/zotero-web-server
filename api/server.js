@@ -12,6 +12,13 @@ const PORT = process.env.PORT || 3000;
 const ZOTERO_DATA_DIR = process.env.ZOTERO_DATA_DIR || '/home/arkantu/Zotero';
 const ZOTERO_LIBRARY_DIR = process.env.ZOTERO_LIBRARY_DIR || '/home/arkantu/Documentos/Zotero Biblioteca';
 
+// Manejador global para promesas no capturadas
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Promesa rechazada no manejada:', reason);
+    console.error('Promesa:', promise);
+    // No salir del proceso, solo registrar el error
+});
+
 // Middleware
 app.use(cors());
 app.use(express.json());
