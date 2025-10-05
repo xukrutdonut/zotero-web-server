@@ -485,9 +485,7 @@ function searchInPDFs(query, limit = 50) {
         allPdfs.files.forEach(file => {
             if (searchCount >= limit) return;
             
-            // Evitar duplicados de archivos ya encontrados por contenido
-            const alreadyFound = results.some(r => r.path === file.path);
-            if (alreadyFound) return;
+            // Nota: Se permiten duplicados para que PDFs puedan aparecer en múltiples carpetas
             
             const fileName = path.basename(file.name).toLowerCase();
             const score = searchTerms.reduce((acc, term) => {
