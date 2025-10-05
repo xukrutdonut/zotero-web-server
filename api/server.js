@@ -71,6 +71,7 @@ class ZoteroAPI {
                     i.dateModified,
                     COALESCE(iv_title.value, 'Sin título') as title,
                     COALESCE(iv_date.value, '') as date,
+                    COALESCE(iv_url.value, '') as url,
                     it.typeName
                 FROM items i
                 LEFT JOIN itemTypes it ON i.itemTypeID = it.itemTypeID
@@ -82,6 +83,10 @@ class ZoteroAPI {
                     SELECT fieldID FROM fields WHERE fieldName = 'date'
                 )
                 LEFT JOIN itemDataValues iv_date ON id_date.valueID = iv_date.valueID
+                LEFT JOIN itemData id_url ON i.itemID = id_url.itemID AND id_url.fieldID = (
+                    SELECT fieldID FROM fields WHERE fieldName = 'url'
+                )
+                LEFT JOIN itemDataValues iv_url ON id_url.valueID = iv_url.valueID
                 WHERE i.itemID NOT IN (SELECT itemID FROM deletedItems)
                 AND it.typeName NOT IN ('attachment', 'note', 'annotation')
                 AND it.typeName IS NOT NULL
@@ -182,6 +187,7 @@ class ZoteroAPI {
                         year: this.extractYear(item.date),
                         dateAdded: item.dateAdded,
                         type: item.typeName,
+                        url: item.url || null,
                         pdfPath: pdfPath,
                         attachments: allAttachments,
                         hasAttachments: allAttachments.length > 0
@@ -497,6 +503,18 @@ app.get('/library-stats', async (req, res) => {
         res.json(stats);
     } catch (error) {
         console.error('Error obteniendo estadísticas:', error);
+        res.status(500).json({ error: 'Error interno del servidor' });
+    }
+});
+
+// Ruta para obtener items sin PDF
+app.get('/library/no-pdf', async (req, res) => {
+    try {
+        const items = await zoteroAPI.getLibraryItems();
+        const itemsWithoutPDF = items.filter(item => !item.pdfPath || item.pdfPath === null);
+        res.json(itemsWithoutPDF);
+    } catch (error) {
+        console.error('Error obteniendo items sin PDF:', error);
         res.status(500).json({ error: 'Error interno del servidor' });
     }
 });

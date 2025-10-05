@@ -439,6 +439,7 @@
             <div class="search-tabs">
                 <div class="tab active" data-tab="folders">📁 Navegación</div>
                 <div class="tab" data-tab="search">🔍 Buscar en Texto</div>
+                <div class="tab" data-tab="nopdf">📋 Sin PDF</div>
             </div>
 
             <div class="search-content">
@@ -469,6 +470,18 @@
                         <div class="status-message" id="progressMessage">Indexando documentos...</div>
                     </div>
                     <div id="searchResults" class="results"></div>
+                </div>
+
+                <div id="nopdfTab" class="tab-content" style="display: none;">
+                    <div class="search-box">
+                        <h3>📋 Entradas sin PDF</h3>
+                        <p style="font-size: 0.9rem; color: #7f8c8d;">
+                            Referencias bibliográficas que no tienen archivos PDF adjuntos. Haz clic en el título para abrir el artículo original.
+                        </p>
+                    </div>
+                    <div id="noPdfResults" class="results">
+                        <div class="loading">Cargando entradas sin PDF...</div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -578,6 +591,11 @@
                 content.style.display = 'none';
             });
             document.getElementById(tabName + 'Tab').style.display = 'block';
+            
+            // Cargar items sin PDF cuando se abre esa pestaña
+            if (tabName === 'nopdf') {
+                loadItemsWithoutPDF();
+            }
         }
 
         // Cargar estructura de carpetas con reintentos
@@ -739,6 +757,11 @@
             // Activar pestaña seleccionada
             document.querySelector(`[data-tab="${tabName}"]`).classList.add('active');
             document.getElementById(tabName + 'Tab').style.display = 'block';
+            
+            // Cargar items sin PDF cuando se abre esa pestaña
+            if (tabName === 'nopdf') {
+                loadItemsWithoutPDF();
+            }
         }
 
         // Cargar archivos de una carpeta
@@ -1089,6 +1112,94 @@
 
         function escapeRegExp(string) {
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        // Cargar items sin PDF
+        async function loadItemsWithoutPDF() {
+            const noPdfResults = document.getElementById('noPdfResults');
+            
+            try {
+                noPdfResults.innerHTML = '<div class="loading">Cargando entradas sin PDF...</div>';
+                
+                const response = await fetch(`${API_BASE}/library/no-pdf`);
+                
+                if (!response.ok) {
+                    throw new Error(`Error HTTP: ${response.status}`);
+                }
+                
+                const items = await response.json();
+                
+                if (items.length === 0) {
+                    noPdfResults.innerHTML = `
+                        <div class="no-results">
+                            ✅ Todas las entradas tienen archivos PDF adjuntos
+                        </div>
+                    `;
+                } else {
+                    renderItemsWithoutPDF(items);
+                }
+                
+            } catch (error) {
+                console.error('❌ Error cargando items sin PDF:', error);
+                noPdfResults.innerHTML = `
+                    <div class="error-message">
+                        Error cargando entradas sin PDF: ${error.message}
+                    </div>
+                `;
+            }
+        }
+
+        function renderItemsWithoutPDF(items) {
+            const noPdfResults = document.getElementById('noPdfResults');
+            
+            const itemsHTML = items.map(item => {
+                // Crear el HTML del item
+                let itemHTML = `<div class="result-item" style="cursor: ${item.url ? 'pointer' : 'default'};">`;
+                
+                // Título - clickeable si tiene URL
+                if (item.url) {
+                    itemHTML += `
+                        <div class="result-title" onclick="window.open('${item.url}', '_blank')" style="color: #3498db; text-decoration: underline;">
+                            📄 ${item.title} 🔗
+                        </div>
+                    `;
+                } else {
+                    itemHTML += `
+                        <div class="result-title">
+                            📄 ${item.title}
+                        </div>
+                    `;
+                }
+                
+                // Información adicional
+                itemHTML += `
+                    <div class="result-context">
+                        <strong>Autores:</strong> ${item.authors || 'Desconocido'}<br>
+                        <strong>Año:</strong> ${item.year || 'N/A'}<br>
+                        <strong>Tipo:</strong> ${item.type || 'documento'}
+                `;
+                
+                if (item.url) {
+                    itemHTML += `<br><strong>URL:</strong> <a href="${item.url}" target="_blank" onclick="event.stopPropagation();" style="color: #3498db;">${item.url}</a>`;
+                }
+                
+                itemHTML += `
+                    </div>
+                    <div class="result-path">
+                        🗓️ Añadido: ${new Date(item.dateAdded).toLocaleDateString()}
+                    </div>
+                </div>
+                `;
+                
+                return itemHTML;
+            }).join('');
+            
+            noPdfResults.innerHTML = `
+                <div style="margin-bottom: 1rem; font-size: 0.9rem; color: #7f8c8d;">
+                    Se encontraron ${items.length} entrada${items.length !== 1 ? 's' : ''} sin PDF
+                </div>
+                ${itemsHTML}
+            `;
         }
 
         // Actualizar estadísticas
