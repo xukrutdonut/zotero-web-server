@@ -1114,6 +1114,14 @@
             return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         }
 
+        // Helper function to escape HTML
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         // Cargar items sin PDF
         async function loadItemsWithoutPDF() {
             const noPdfResults = document.getElementById('noPdfResults');
@@ -1153,20 +1161,27 @@
             const noPdfResults = document.getElementById('noPdfResults');
             
             const itemsHTML = items.map(item => {
+                // Escapar valores para seguridad
+                const safeTitle = escapeHtml(item.title);
+                const safeAuthors = escapeHtml(item.authors || 'Desconocido');
+                const safeYear = escapeHtml(item.year || 'N/A');
+                const safeType = escapeHtml(item.type || 'documento');
+                const safeUrl = item.url ? escapeHtml(item.url) : '';
+                
                 // Crear el HTML del item
                 let itemHTML = `<div class="result-item" style="cursor: ${item.url ? 'pointer' : 'default'};">`;
                 
                 // Título - clickeable si tiene URL
                 if (item.url) {
                     itemHTML += `
-                        <div class="result-title" onclick="window.open('${item.url}', '_blank')" style="color: #3498db; text-decoration: underline;">
-                            📄 ${item.title} 🔗
+                        <div class="result-title" onclick="window.open('${safeUrl}', '_blank')" style="color: #3498db; text-decoration: underline;">
+                            📄 ${safeTitle} 🔗
                         </div>
                     `;
                 } else {
                     itemHTML += `
                         <div class="result-title">
-                            📄 ${item.title}
+                            📄 ${safeTitle}
                         </div>
                     `;
                 }
@@ -1174,13 +1189,13 @@
                 // Información adicional
                 itemHTML += `
                     <div class="result-context">
-                        <strong>Autores:</strong> ${item.authors || 'Desconocido'}<br>
-                        <strong>Año:</strong> ${item.year || 'N/A'}<br>
-                        <strong>Tipo:</strong> ${item.type || 'documento'}
+                        <strong>Autores:</strong> ${safeAuthors}<br>
+                        <strong>Año:</strong> ${safeYear}<br>
+                        <strong>Tipo:</strong> ${safeType}
                 `;
                 
                 if (item.url) {
-                    itemHTML += `<br><strong>URL:</strong> <a href="${item.url}" target="_blank" onclick="event.stopPropagation();" style="color: #3498db;">${item.url}</a>`;
+                    itemHTML += `<br><strong>URL:</strong> <a href="${safeUrl}" target="_blank" onclick="event.stopPropagation();" style="color: #3498db;">${safeUrl}</a>`;
                 }
                 
                 itemHTML += `
