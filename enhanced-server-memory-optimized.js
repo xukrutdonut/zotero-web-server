@@ -12,6 +12,13 @@ const PORT = process.env.PORT || 8080;
 // Configurar límites de memoria Node.js
 process.setMaxListeners(0);
 
+// Manejador global para promesas no capturadas
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('❌ Promesa rechazada no manejada:', reason);
+    console.error('Promesa:', promise);
+    // No salir del proceso, solo registrar el error
+});
+
 // Event emitter para sincronización
 const syncEmitter = new EventEmitter();
 
@@ -171,17 +178,22 @@ function extractPDFText(pdfPath, callback) {
         }
         
         pdfparse(buffer).then(function(data) {
-            // Si el texto extraído es muy corto, puede que sea un PDF de imágenes
-            if (data.text.trim().length < 50) {
-                console.log(`📸 Texto muy corto (${data.text.trim().length} chars), intentando OCR para: ${path.basename(pdfPath)}`);
+            try {
+                // Si el texto extraído es muy corto, puede que sea un PDF de imágenes
+                if (data.text.trim().length < 50) {
+                    console.log(`📸 Texto muy corto (${data.text.trim().length} chars), intentando OCR para: ${path.basename(pdfPath)}`);
+                    tryOCRImproved(pdfPath, callback);
+                    return;
+                }
+                
+                callback(null, data.text);
+                // Forzar limpieza de memoria
+                if (global.gc) {
+                    global.gc();
+                }
+            } catch (callbackError) {
+                console.log(`⚠️ Error en callback después de parse: ${path.basename(pdfPath)} - ${callbackError.message}`);
                 tryOCRImproved(pdfPath, callback);
-                return;
-            }
-            
-            callback(null, data.text);
-            // Forzar limpieza de memoria
-            if (global.gc) {
-                global.gc();
             }
         }).catch(function(error) {
             console.log(`📸 PDF parse falló (${error.message}), intentando OCR para: ${path.basename(pdfPath)}`);
@@ -824,6 +836,9 @@ initServer().then(() => {
         console.log(`💾 Caché persistente: ${CACHE_DIR}`);
         console.log(`📊 Sistema estadísticas: REST API + Polling manual`);
     });
+}).catch((error) => {
+    console.error('❌ Error iniciando servidor:', error);
+    process.exit(1);
 });
 
 // Guardar índice periódicamente
